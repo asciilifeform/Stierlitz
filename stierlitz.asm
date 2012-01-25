@@ -42,11 +42,33 @@ bios_configuration_change:  	dw 0xDEAD
 
 ;; ...
 
+;*****************************************************************************
+;; RS-232 debugger
+;*****************************************************************************
+dbg_putchar:
+    push   r2
+    mov    r2, r0
+    mov    r0, 1      ; write to the UART
+    int    UART_INT   ; call UART_INT
+    pop    r2
+    ret
 
+dbg_getchar:
+    xor    r0, r0     ;R0 = read data from the keyboard
+    int    UART_INT   ;call UART_INT
+    ret    	      ;return character in R0
 
+splat:
+    mov	   r0, 0x48 		; 'H'
+    call   dbg_putchar
+    ret
 
 ;*****************************************************************************
 begin_code:
+    ; enable UART debug
+    mov    r0, 9		; 19200 baud
+    int    KBHIT_INT
+
     ; Update BIOS SIE2 descriptor pointers.
     mov    [SUSB2_DEV_DESC_VEC], dev_desc
     mov    [SUSB2_CONFIG_DESC_VEC], conf_desc
@@ -95,7 +117,11 @@ my_class_request_handler:
     cmp	   r0, MSC_REQUEST_GET_MAX_LUN
     je	   class_req_eq_request_get_max_lun
     ;; none of these:
-    jmp    [bios_class_request_handler] ; Carry out BIOS class request handler.
+    ;; jmp    [bios_class_request_handler] ; Carry out BIOS class request handler.
+    ;;; replace BIOS's handler
+    int	   SUSB2_FINISH_INT	; call STATUS phrase
+    ret
+    ;;; ----------------------
 class_req_eq_request_get_max_lun:
     ;; No LUNs on this device, so send back a zero:
     mov	   [send_buffer], 0x00	 ; EP0Buf[0] = 0
@@ -110,8 +136,8 @@ class_req_eq_request_reset:
     ;; ----------------------------------
     ;; Done with class request handler
 end_class_request_handler:
-    int	    SUSB2_FINISH_INT
     ret
+    
 ;*****************************************************************************
 
 ;*****************************************************************************
@@ -148,24 +174,22 @@ usb_send_data:
    mov      [usbsend_link], 0	; must be 0x0000 for send routine
    mov      [usbsend_addr], send_buffer
    ;; set up callback
-   ;; mov      [usbsend_call], usb_send_done
-   mov      [usbsend_call], 0x0000
+   mov      [usbsend_call], usb_send_done
    ;; --------
    mov      r8, usbsend_link	; pointer to linker
    mov      r1, [send_endpoint] ; which endpoint to send to
    int      SUSB2_SEND_INT	; call interrupt
    ret
 usb_send_done:
-   ;; Do we need this?
-   ;; int	    SUSB2_FINISH_INT	; call STATUS phrase
+   int	    SUSB2_FINISH_INT	; call STATUS phrase
    ret
 ;*****************************************************************************
 send_endpoint			db 0x00
 ;; Send data structure
 usbsend_link			dw 0x0000
-usbsend_addr			dw send_buffer
+usbsend_addr			dw 0x0000
 usbsend_len			dw 0x0000
-usbsend_call			dw usb_send_done
+usbsend_call			dw 0x0000
 ;*****************************************************************************
 
 
@@ -180,7 +204,7 @@ check_for_received:
 
 
 
-;*****************************************************************************
+
 ;*****************************************************************************
 ;; SCSI stuff
 ;*****************************************************************************
