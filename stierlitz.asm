@@ -35,16 +35,14 @@ ORIGIN equ 0x500
 rom_start:
     jmp	   begin_code
 ;*****************************************************************************
-;; vars
+;; to save bios handlers
 bios_standard_request_handler:	dw 0xDEAD
 bios_class_request_handler: 	dw 0xDEAD
 bios_configuration_change:  	dw 0xDEAD
-
 bios_idle_chain:  		dw 0xDEAD
-;; ...
 
+;; Endpoints:
 ;; EP_IN = 0x81 (ep1), EP_OUT = 0x02 (ep2)
-
 EP_IN	equ	1
 EP_OUT	equ	2
 
@@ -98,7 +96,7 @@ begin_code:
 ;*****************************************************************************
 main_idler:
     ;; Attempt to read CSW from bulk-in endpoint:
-    mov    [recv_endpoint], EP_IN	; Receive form EP 1 (IN)
+    mov    [recv_endpoint], EP_OUT	; Receive from host
     call   poll_receiver	; speak if spoken to
     jmp    [bios_idle_chain]
 ;*****************************************************************************
@@ -247,14 +245,13 @@ usbrecv_call			dw 0x0000
 ;*****************************************************************************
 ;; Process data received from an endpoint (bulk.) EP is in R0.
 ;; Received packet is in receive_buffer.
-;; Response will be built in send_buffer.
+;; Response (if not stall) will be built in send_buffer.
 ;*****************************************************************************
 response_length			dw 0x0000
 ;*****************************************************************************
 process_rx_from_ep:
     ;; Determine what the response should be.
-    ;; This depends first on the SCSI state.
-
+    ;; This depends first on the SCSI state machine's state.
     mov    r9, [scsi_state]
     cmp    r9, 4
     jle    scsi_state_0_to_4	; make sure state is 0..4
@@ -298,7 +295,7 @@ response_is_cooked:
     ;; Send the response:
     mov	   r0, [response_length]
     mov	   [usbsend_len], r0	 ; # of bytes in response
-    mov    [send_endpoint], EP_OUT ; send response to OUT endpoint
+    mov    [send_endpoint], EP_IN ; send response to host
     call   usb_send_data	 ; transmit answer
     ret
 ;*****************************************************************************
