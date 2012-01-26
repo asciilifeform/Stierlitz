@@ -40,7 +40,13 @@ bios_standard_request_handler:	dw 0xDEAD
 bios_class_request_handler: 	dw 0xDEAD
 bios_configuration_change:  	dw 0xDEAD
 
+bios_idle_chain:  		dw 0xDEAD
 ;; ...
+
+;; EP_IN = 0x81 (ep1), EP_OUT = 0x02 (ep2)
+
+EP_IN	equ	1
+EP_OUT	equ	2
 
 ;*****************************************************************************
 ;; RS-232 debugger
@@ -73,23 +79,29 @@ begin_code:
     mov    [SUSB2_DEV_DESC_VEC], dev_desc
     mov    [SUSB2_CONFIG_DESC_VEC], conf_desc
     mov    [SUSB2_STRING_DESC_VEC], string_desc
-
     ;; Back up BIOS handler locations
     mov    [bios_standard_request_handler], [(SUSB2_STANDARD_INT*2)]
     mov    [bios_class_request_handler], [(SUSB2_CLASS_INT*2)]
     mov    [bios_configuration_change], [(SUSB2_DELTA_CONFIG_INT*2)]
-    
     ;; Overwrite BIOS handler locations with ours
     mov    [(SUSB2_STANDARD_INT*2)], my_standard_request_handler
     mov    [(SUSB2_CLASS_INT*2)], my_class_request_handler
     mov    [(SUSB2_DELTA_CONFIG_INT*2)], my_configuration_change
-
-    
-;;; TODO:
-;;; Now initialize SIE1, this will result in it enumerating with the PC Host
-;;; susb_init( SIE1, USB_FULL_SPEED );
-
+    ;; Initialize idler
+    mov    r0, main_idler	; r0 <- new idle task
+    int    INSERT_IDLE_INT	; insert idle task
+    mov    [bios_idle_chain], r0 ; save link to bios idle chain
     ret
+
+;*****************************************************************************
+;; Main Idler
+;*****************************************************************************
+main_idler:
+    ;; Attempt to read CSW from bulk-in endpoint:
+    mov    [recv_endpoint], EP_IN	; Receive form EP 1 (IN)
+    call   poll_receiver	; speak if spoken to
+    jmp    [bios_idle_chain]
+;*****************************************************************************
 
 
 ;*****************************************************************************
@@ -147,7 +159,7 @@ my_standard_request_handler:
     ;; which requests? i.e. STALL?
     ;; ... getDescriptor? (maybe not, seeing as the BIOS seems to do it ?)
     ;; ...
-    ;; ... for now, do nothing.    
+    ;; ... for now, do nothing.
     ;; Or:
     ;; Carry out BIOS standard request handler.
     jmp    [bios_standard_request_handler]
@@ -170,19 +182,20 @@ my_configuration_change:
 
 ;*****************************************************************************
 ; Transmit usbsend_len bytes to endpoint send_endpoint from send_buffer.
+;*****************************************************************************
 usb_send_data:
-   mov      [usbsend_link], 0	; must be 0x0000 for send routine
-   mov      [usbsend_addr], send_buffer
-   ;; set up callback
-   mov      [usbsend_call], usb_send_done
-   ;; --------
-   mov      r8, usbsend_link	; pointer to linker
-   mov      r1, [send_endpoint] ; which endpoint to send to
-   int      SUSB2_SEND_INT	; call interrupt
-   ret
+    mov     [usbsend_link], 0	; must be 0x0000 for send routine
+    mov     [usbsend_addr], send_buffer
+    ;; set up callback
+    mov     [usbsend_call], usb_send_done
+    ;; --------
+    mov     r8, usbsend_link	; pointer to linker
+    mov     r1, [send_endpoint] ; which endpoint to send to
+    int     SUSB2_SEND_INT	; call interrupt
+    ret
 usb_send_done:
-   int	    SUSB2_FINISH_INT	; call STATUS phrase
-   ret
+    int	    SUSB2_FINISH_INT	; call STATUS phrase
+    ret
 ;*****************************************************************************
 send_endpoint			db 0x00
 ;; Send data structure
@@ -192,23 +205,128 @@ usbsend_len			dw 0x0000
 usbsend_call			dw 0x0000
 ;*****************************************************************************
 
+;*****************************************************************************
+;; Poll for received data. EP is in [recv_endpoint].
+;*****************************************************************************
+receiver_lock			db 0x00 ; Are we already waiting?
+;*****************************************************************************
+poll_receiver:
+    cmp     [receiver_lock], 1
+    je      receiver_busy
+    ;; Start receive-data:
+    mov     [receiver_lock], 1	; Lock receiver
+    mov     [usbrecv_link], 0
+    mov     [usbrecv_addr], receive_buffer
+    mov     [usbrecv_call], receiver_done
+    mov     r8, usbrecv_link	; pointer to linker
+    mov     r0, [recv_endpoint] ; from which endpoint to receive
+    int     SUSB2_RECEIVE_INT	; call interrupt
+receiver_busy:
+    ret
 
-;*****************************************************************************
-;; Poll for received data
-;*****************************************************************************
-check_for_received:
+;; Callback
+receiver_done:
+    int	    SUSB2_FINISH_INT	; call STATUS phrase
+    ;; now process the received packet:
+    mov     r0, [recv_endpoint]	; which endpoint we finished receiving from
+    call    process_rx_from_ep  ; process the rx buffer
+    mov     [receiver_lock], 0	; Unlock receiver
     
-
+    call    splat		; debug
+    
     ret
 ;*****************************************************************************
+recv_endpoint			db 0x00
+;; Receiver data structure
+usbrecv_link			dw 0x0000
+usbrecv_addr			dw 0x0000
+usbrecv_len			dw 0x0000
+usbrecv_call			dw 0x0000
+;*****************************************************************************
+
+;*****************************************************************************
+;; Process data received from an endpoint (bulk.) EP is in R0.
+;; Received packet is in receive_buffer.
+;; Response will be built in send_buffer.
+;*****************************************************************************
+response_length			dw 0x0000
+;*****************************************************************************
+process_rx_from_ep:
+    ;; Determine what the response should be.
+    ;; This depends first on the SCSI state.
+
+    mov    r9, [scsi_state]
+    cmp    r9, 4
+    jle    scsi_state_0_to_4	; make sure state is 0..4
+    ;; recover from weird state - should never get here:
+    mov    [scsi_state], SCSI_state_CBW
+    mov    r9, [scsi_state]
+scsi_state_0_to_4:
+    shl    r9, 1
+    jmpl   [r9 + scsi_state_jmp_table]
+
+    ;; SCSI State Machine Table
+scsi_state_jmp_table:
+    dw     do_state_CBW
+    dw     do_state_data_out
+    dw     do_state_data_in
+    dw     do_state_CSW
+    dw     do_state_stalled
+    ;; ------------------------
+do_state_CBW:
 
 
+    jmp    response_is_cooked
+
+do_state_data_out:
+
+    jmp    response_is_cooked
+
+do_state_data_in:
+
+    jmp    response_is_cooked
+
+do_state_CSW:
+
+    jmp    response_is_cooked
+
+do_state_stalled:
+
+
+    ;; mov	   [send_buffer], 0x00	 ; EP0Buf[0] = 0
+response_is_cooked:
+    ;; Send the response:
+    mov	   r0, [response_length]
+    mov	   [usbsend_len], r0	 ; # of bytes in response
+    mov    [send_endpoint], EP_OUT ; send response to OUT endpoint
+    call   usb_send_data	 ; transmit answer
+    ret
+;*****************************************************************************
 
 
 ;*****************************************************************************
 ;; SCSI stuff
 ;*****************************************************************************
 
+;*****************************************************************************
+;; SCSI State
+;*****************************************************************************
+;; sense key
+SCSI_dw_sense:
+;; hex: 00aabbcc, where aa=KEY, bb=ASC, cc=ASCQ
+    dw				0x0000
+    dw				0x0000
+
+    ;; state machine state
+scsi_state:
+    db				0x00
+    ;; Possible states:
+SCSI_state_CBW		EQU	0
+SCSI_state_data_out	EQU	1
+SCSI_state_data_in	EQU	2
+SCSI_state_CSW		EQU	3
+SCSI_state_stalled	EQU	4
+;*****************************************************************************
 
 ;*****************************************************************************
 ;; Command Block Wrapper
@@ -233,7 +351,6 @@ CBW_cb:
     dup				16
 ;*****************************************************************************
 
-
 ;*****************************************************************************
 ;; Command Status Wrapper
 ;*****************************************************************************
@@ -251,29 +368,23 @@ CSW_status:
     db				0x00
 ;*****************************************************************************
 
-
 ;*****************************************************************************
-;; SCSI State
+;; Inquiry Response
 ;*****************************************************************************
-;; sense key
-SCSI_dw_sense:
-;; hex: 00aabbcc, where aa=KEY, bb=ASC, cc=ASCQ
-    dw				0x0000
-    dw				0x0000
-
-    ;; state machine state
-scsi_state:
-    db				0x00
-    ;; Possible states:
-SCSI_state_CBW		EQU	0
-SCSI_state_data_out	EQU	1
-SCSI_state_data_in	EQU	2
-SCSI_state_CSW		EQU	3
-SCSI_state_stalled	EQU	4
+SCSI_inquiry_response:
+    db		0x00		; Device = Direct Access
+    db		0x80		; RMB = 1: Removable Medium
+    db		0x00		; Standard Version = None
+    db		0x01		; Data Format = unknown
+    db		(INQ_ADD_LEN-4)	; Additional Length
+    db		0x00		; Flags: nothing special
+    db		0x00		; Flags: normal device, no extra features
+    db		0x00		; Flags: no rel. addressing, sync. xmit, linked commands, or queuing
+    db          'Loper OS'	; Manufacturer ID (bytes 8..15)
+    db		'Bus to Thumb Drv' ; Product ID (bytes 16..31)
+    db		'1.00'		; Product Revision Level (Bytes 32..35)
+    INQ_ADD_LEN equ ($-SCSI_inquiry_response)
 ;*****************************************************************************
-
-
-
 
 ;*****************************************************************************
 
@@ -282,8 +393,7 @@ SCSI_state_stalled	EQU	4
 align 2
 
 send_buffer			dup 512
-
-receive_buffer			dup 512
+receive_buffer			dup 512 ; Let's make sure this comes last, in case of overrun.
 ;*****************************************************************************
 
 include descriptor.inc
