@@ -145,7 +145,6 @@ class_req_eq_request_reset:
     ;; Done with class request handler
 end_class_request_handler:
     ret
-    
 ;*****************************************************************************
 
 ;*****************************************************************************
@@ -153,10 +152,7 @@ end_class_request_handler:
 ;*****************************************************************************
 my_standard_request_handler:
     ;; which requests? i.e. STALL?
-    ;; ... getDescriptor? (maybe not, seeing as the BIOS seems to do it ?)
-    ;; ...
     ;; ... for now, do nothing.
-    ;; Or:
     ;; Carry out BIOS standard request handler.
     jmp    [bios_standard_request_handler]
 ;*****************************************************************************
@@ -172,8 +168,20 @@ my_configuration_change:
 
 ;*****************************************************************************
 ;*****************************************************************************
-;; Endpoint I/O
+; Endpoint I/O
 ;*****************************************************************************
+;*****************************************************************************
+
+;*****************************************************************************
+; Variables to keep track of bulk I/O
+;*****************************************************************************
+dwTransferSize:
+dwTransferSize_lw		dw 0x0000
+dwTransferSize_uw		dw 0x0000
+
+dwOffset:
+dwOffset_lw			dw 0x0000
+dwOffset_uw			dw 0x0000
 ;*****************************************************************************
 
 ;*****************************************************************************
@@ -199,6 +207,18 @@ usbsend_link			dw 0x0000
 usbsend_addr			dw 0x0000
 usbsend_len			dw 0x0000
 usbsend_call			dw 0x0000
+;*****************************************************************************
+
+;*****************************************************************************
+; Transmit r0 bytes from send_buffer to host via EP_IN.
+; r0 will equal number of bytes which were NOT sent.
+;*****************************************************************************
+bulk_send:
+    mov	   [usbsend_len], r0	 ; # of bytes in response
+    mov    [send_endpoint], EP_IN ; send response to host
+    call   usb_send_data	 ; transmit answer
+    mov    r0, [usbsend_len]	 ; bytes failed (0 if all were sent.)
+    ret
 ;*****************************************************************************
 
 ;*****************************************************************************
@@ -308,21 +328,24 @@ transmit_response:
 ;*****************************************************************************
 check_cbw:
     cmp    r0, 31
-    jne    invalid_cbw
+    jne    invalid_cbw		; if length != 31, invalid
     cmp    [MSC_CBW_Signature_lw], CBW_Signature_lw_expected
-    jne    invalid_cbw
+    jne    invalid_cbw		; lower word of signature is invalid
     cmp    [MSC_CBW_Signature_uw], CBW_Signature_uw_expected
-    jne    invalid_cbw
-
-    
+    jne    invalid_cbw		; upper word of signature is invalid
+    cmp    [CBW_lun], 0		; LUN == 0?
+    jne    invalid_cbw		; if not, then CBW is 'not meaningful.'
+    cmp    [CBW_cb_length], 1	; if bCBWCBLength < 1:
+    jb     invalid_cbw		; then invalid
+    cmp    [CBW_cb_length], 16	; if bCBWCBLength > 16:
+    jg     invalid_cbw		; then invalid
+    ;; CBW is Valid and Meaningful:
     mov    r0, 1
     ret
 invalid_cbw:
     mov    r0, 0
     ret
-
-
-
+;*****************************************************************************
 
 ;*****************************************************************************
 ;; Stall ongoing transfer. Determine which endpoint to stall using CBW.
@@ -356,7 +379,28 @@ set_stall_bit: ; Stall the endpoint:
     ret
 ;*****************************************************************************
 
+;*****************************************************************************
+;; Send CSW, on the next bulk-IN transfer.
+;; argument: r0 = bStatus
+;*****************************************************************************
+send_csw:
+    mov    [CSW_status], r0
+    mov    [MSC_CSW_Signature_lw], CSW_Signature_lw_expected ; signature lower word
+    mov    [MSC_CSW_Signature_uw], CSW_Signature_uw_expected ; signature upper word
+    mov    w[CSW_tag_lw], w[CBW_tag_lw]	; copy lower word of tag from last CBW
+    mov    w[CSW_tag_uw], w[CBW_tag_uw] ; copy upper word of tag from last CBW
+    ;; iResidue = max( 0, (dwCBWDataTransferLength - dwTransferSize) )
+
+    ;; CSW_data_residue_lw
+    ;; CSW_data_residue_uw
+    ;; TODO ...
     
+    mov    [scsi_state], SCSI_state_CSW ; next SCSI state = CSW
+    ret
+;*****************************************************************************
+
+
+
 ;*****************************************************************************
 ;; SCSI stuff
 ;*****************************************************************************
@@ -374,17 +418,16 @@ SCSI_dw_sense:
 scsi_state:
     db				0x00
     ;; Possible states:
-SCSI_state_CBW		EQU	0
-SCSI_state_data_out	EQU	1
-SCSI_state_data_in	EQU	2
-SCSI_state_CSW		EQU	3
-SCSI_state_stalled	EQU	4
+SCSI_state_CBW		EQU	0x00
+SCSI_state_data_out	EQU	0x01
+SCSI_state_data_in	EQU	0x02
+SCSI_state_CSW		EQU	0x03
+SCSI_state_stalled	EQU	0x04
 ;*****************************************************************************
 
 ;*****************************************************************************
-;; Command Block Wrapper
+;; SCSI Command Block Wrapper (received)
 ;*****************************************************************************
-
 MSC_CBW_Signature_lw		EQU	(receive_buffer)
 MSC_CBW_Signature_uw		EQU	(receive_buffer + 1)
 CBW_tag_lw			EQU	(receive_buffer + 2)
@@ -395,42 +438,18 @@ CBW_flags			EQU	(receive_buffer + 6)
 CBW_lun				EQU	(receive_buffer + 7)
 CBW_cb_length			EQU	(receive_buffer + 8)
 CBW_cb				EQU	(receive_buffer + 9)
-
-;; CBW:
-;; CBW_signature:
-;;     dw				MSC_CBW_Signature_lw
-;;     dw				MSC_CBW_Signature_uw
-;; CBW_tag:
-;;     dw				0x0000
-;;     dw				0x0000
-;; CBW_data_transfer_length:
-;;     dw				0x0000
-;;     dw				0x0000
-;; CBW_flags:
-;;     db				0x00
-;; CBW_lun:
-;;     db				0x00
-;; CBW_cb_length:
-;;     db				0x00
-;; CBW_cb:
-;;     dup				16
 ;*****************************************************************************
 
 ;*****************************************************************************
-;; Command Status Wrapper
+;; SCSI Command Status Wrapper (to send to host)
 ;*****************************************************************************
-CSW:
-CSW_signature:
-    dw				CSW_Signature_lw_expected
-    dw				CSW_Signature_uw_expected
-CSW_tag:
-    dw				0x0000
-    dw				0x0000
-CSW_data_residue:
-    dw				0x0000
-    dw				0x0000
-CSW_status:
-    db				0x00
+MSC_CSW_Signature_lw		EQU	(send_buffer)
+MSC_CSW_Signature_uw		EQU	(send_buffer + 1)
+CSW_tag_lw			EQU	(send_buffer + 2)
+CSW_tag_uw			EQU	(send_buffer + 3)
+CSW_data_residue_lw		EQU	(send_buffer + 4)
+CSW_data_residue_uw		EQU	(send_buffer + 5)
+CSW_status			EQU	(send_buffer + 6)
 ;*****************************************************************************
 
 ;*****************************************************************************
@@ -458,7 +477,7 @@ SCSI_inquiry_response:
 align 2
 
 send_buffer			dup 512
-receive_buffer			dup 512 ; Let's make sure this comes last, in case of overrun.
+receive_buffer			dup 512 ; This comes last, in case of overrun.
 ;*****************************************************************************
 
 include descriptor.inc
