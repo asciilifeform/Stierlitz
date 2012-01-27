@@ -95,8 +95,6 @@ begin_code:
 ;; Main Idler
 ;*****************************************************************************
 main_idler:
-    ;; Attempt to read CSW from bulk-in endpoint:
-    mov    [recv_endpoint], EP_OUT	; Receive from host
     call   poll_receiver	; speak if spoken to
     jmp    [bios_idle_chain]
 ;*****************************************************************************
@@ -171,7 +169,7 @@ my_configuration_change:
     ;; ... for now, do nothing.
     jmp    [bios_configuration_change]
 ;*****************************************************************************
-   
+
 ;*****************************************************************************
 ;*****************************************************************************
 ;; Endpoint I/O
@@ -212,6 +210,7 @@ poll_receiver:
     cmp     [receiver_lock], 1
     je      receiver_busy
     ;; Start receive-data:
+    mov    [recv_endpoint], EP_OUT ; Receive from host
     mov     [receiver_lock], 1	; Lock receiver
     mov     [usbrecv_link], 0
     mov     [usbrecv_addr], receive_buffer
@@ -271,27 +270,29 @@ scsi_state_jmp_table:
     dw     do_state_stalled
     ;; ------------------------
 do_state_CBW:
+    ;; Check for valid CBW:
+    
 
-
-    jmp    response_is_cooked
+    ret
 
 do_state_data_out:
 
-    jmp    response_is_cooked
+    ret
 
 do_state_data_in:
 
-    jmp    response_is_cooked
+    ret
 
 do_state_CSW:
 
-    jmp    response_is_cooked
+    ret
 
 do_state_stalled:
 
+    ret
 
     ;; mov	   [send_buffer], 0x00	 ; EP0Buf[0] = 0
-response_is_cooked:
+transmit_response:
     ;; Send the response:
     mov	   r0, [response_length]
     mov	   [usbsend_len], r0	 ; # of bytes in response
@@ -300,7 +301,62 @@ response_is_cooked:
     ret
 ;*****************************************************************************
 
+;*****************************************************************************
+;; Verify CBW.
+;; argument: r0 == length of CBW.
+;; returns: r0 = 1 if 'valid and meaningful.' r0 = 0 if otherwise.
+;*****************************************************************************
+check_cbw:
+    cmp    r0, 31
+    jne    invalid_cbw
+    cmp    [MSC_CBW_Signature_lw], CBW_Signature_lw_expected
+    jne    invalid_cbw
+    cmp    [MSC_CBW_Signature_uw], CBW_Signature_uw_expected
+    jne    invalid_cbw
 
+    
+    mov    r0, 1
+    ret
+invalid_cbw:
+    mov    r0, 0
+    ret
+
+
+
+
+;*****************************************************************************
+;; Stall ongoing transfer. Determine which endpoint to stall using CBW.
+;*****************************************************************************
+stall_transfer:
+    mov    r0, [CBW_flags]  ; Whether to stall IN endpoint:
+    test   r0, 0x80         ; Bit 7 = 0 for an OUT (host-to-device) transfer.
+    jnz	   stall_bulk_in_ep ; Bit 7 = 1 for an IN (device-to-host) transfer.
+    cmp    [CBW_data_transfer_length_lw], 0x0000 ; if lower word != 0, then stall EP_OUT
+    jne    stall_out
+    cmp    [CBW_data_transfer_length_uw], 0x0000 ; if upper word != 0, then stall EP_OUT
+    jne    stall_out
+    ;; otherwise, if CBW_data_transfer_length == 0, stall EP_IN:
+    call   stall_bulk_in_ep
+    ret
+stall_out:
+    call   stall_bulk_out_ep
+    ret
+;*****************************************************************************
+
+;*****************************************************************************
+;; Stall endpoints.
+;*****************************************************************************
+stall_bulk_out_ep: ; Select endpoint 2 (OUT) control register
+    mov    r9, DEV2_EP2_CTL_REG
+    jmp    set_stall_bit
+stall_bulk_in_ep: ; Select endpoint 1 (IN) control register
+    mov    r9, DEV2_EP1_CTL_REG
+set_stall_bit: ; Stall the endpoint:
+    or     [r9], STALL_EN
+    ret
+;*****************************************************************************
+
+    
 ;*****************************************************************************
 ;; SCSI stuff
 ;*****************************************************************************
@@ -328,24 +384,36 @@ SCSI_state_stalled	EQU	4
 ;*****************************************************************************
 ;; Command Block Wrapper
 ;*****************************************************************************
-CBW:
-CBW_signature:
-    dw				MSC_CBW_Signature_lw
-    dw				MSC_CBW_Signature_uw
-CBW_tag:
-    dw				0x0000
-    dw				0x0000
-CBW_data_transfer_length:
-    dw				0x0000
-    dw				0x0000
-CBW_flags:
-    db				0x00
-CBW_lun:
-    db				0x00
-CBW_cb_length:
-    db				0x00
-CBW_cb:
-    dup				16
+
+MSC_CBW_Signature_lw		EQU	(receive_buffer)
+MSC_CBW_Signature_uw		EQU	(receive_buffer + 1)
+CBW_tag_lw			EQU	(receive_buffer + 2)
+CBW_tag_uw			EQU	(receive_buffer + 3)
+CBW_data_transfer_length_lw	EQU	(receive_buffer + 4)
+CBW_data_transfer_length_uw	EQU	(receive_buffer + 5)
+CBW_flags			EQU	(receive_buffer + 6)
+CBW_lun				EQU	(receive_buffer + 7)
+CBW_cb_length			EQU	(receive_buffer + 8)
+CBW_cb				EQU	(receive_buffer + 9)
+
+;; CBW:
+;; CBW_signature:
+;;     dw				MSC_CBW_Signature_lw
+;;     dw				MSC_CBW_Signature_uw
+;; CBW_tag:
+;;     dw				0x0000
+;;     dw				0x0000
+;; CBW_data_transfer_length:
+;;     dw				0x0000
+;;     dw				0x0000
+;; CBW_flags:
+;;     db				0x00
+;; CBW_lun:
+;;     db				0x00
+;; CBW_cb_length:
+;;     db				0x00
+;; CBW_cb:
+;;     dup				16
 ;*****************************************************************************
 
 ;*****************************************************************************
@@ -353,8 +421,8 @@ CBW_cb:
 ;*****************************************************************************
 CSW:
 CSW_signature:
-    dw				MSC_CSW_Signature_lw
-    dw				MSC_CSW_Signature_uw
+    dw				CSW_Signature_lw_expected
+    dw				CSW_Signature_uw_expected
 CSW_tag:
     dw				0x0000
     dw				0x0000

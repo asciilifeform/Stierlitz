@@ -57,11 +57,11 @@ CSW_CMD_FAILED                  equ	0x01  ;; Failed transfer
 CSW_PHASE_ERROR                 equ	0x02  ;; Conflict b/w host and device
 
 ;; MSC signatures
-MSC_CBW_Signature_lw            equ	0x5355
-MSC_CBW_Signature_uw            equ	0x4342
+CBW_Signature_lw_expected	equ	0x5355
+CBW_Signature_uw_expected      	equ	0x4342
 
-MSC_CSW_Signature_lw            equ	0x5355
-MSC_CSW_Signature_uw            equ	0x5342
+CSW_Signature_lw_expected      	equ	0x5355
+CSW_Signature_uw_expected      	equ	0x5342
 
 ;;  MSC Bulk-only Stage
 MSC_BS_CBW                      equ	0 	;; Command Block Wrapper
