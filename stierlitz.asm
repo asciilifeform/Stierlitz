@@ -116,10 +116,8 @@ wLength		equ	6
 ;*****************************************************************************
 ;; CLASS_INT vector
 ;*****************************************************************************
-my_class_request_handler:
-    ;; Handle MSC class requests
+my_class_request_handler: ;; Handle MSC class requests.
     mov	   r0, b[r8 + bRequest] ; save request value
-    ;; what to do about the fact that MSC_* are only byte-long ???
     cmp	   r0, MSC_REQUEST_RESET
     je	   class_req_eq_request_reset
     cmp	   r0, MSC_REQUEST_GET_MAX_LUN
@@ -139,8 +137,8 @@ class_req_eq_request_get_max_lun:
     jmp	   end_class_request_handler
 class_req_eq_request_reset:
     mov    [scsi_state], SCSI_state_CBW
-    ;; dwSense = 0
-    ;; apparently nothing else ...?
+    mov    [SCSI_dw_sense_lw], 0x0000
+    mov    [SCSI_dw_sense_uw], 0x0000 ; dwSense = 0
     ;; ----------------------------------
     ;; Done with class request handler
 end_class_request_handler:
@@ -377,6 +375,18 @@ stall_bulk_in_ep: ; Select endpoint 1 (IN) control register
 set_stall_bit: ; Stall the endpoint:
     or     [r9], STALL_EN
     ret
+;; ---------------------------------------------------------------------------
+;; Do we need to clear the stall bit later?
+;; CY7C67300 data sheet sayeth:
+;; ---------------------------------------------------------------------------
+;; Stall Enable (Bit 5)
+;; The Stall Enable bit sends a Stall in response to the next request
+;; (unless it is a setup request, which are always ACKed). This is a
+;; sticky bit and continues to respond with Stalls until cleared by
+;; firmware.
+;; 1: Send Stall
+;; 0: Do not send Stall
+;; ---------------------------------------------------------------------------
 ;*****************************************************************************
 
 ;*****************************************************************************
@@ -390,15 +400,22 @@ send_csw:
     mov    w[CSW_tag_lw], w[CBW_tag_lw]	; copy lower word of tag from last CBW
     mov    w[CSW_tag_uw], w[CBW_tag_uw] ; copy upper word of tag from last CBW
     ;; iResidue = max( 0, (dwCBWDataTransferLength - dwTransferSize) )
-
-    ;; CSW_data_residue_lw
-    ;; CSW_data_residue_uw
-    ;; TODO ...
-    
+    mov    r2, w[dwTransferSize_lw]
+    mov    r3, w[dwTransferSize_uw] ; R3:R2 = dwTransferSize
+    mov    r0, w[CBW_data_transfer_length_lw]
+    mov    r1, w[CBW_data_transfer_length_uw] ; R1:R0 = dwCBWDataTransferLength
+    ;; R1:R0 - R3:R2
+    sub    r0, r2 ; Subtract the lower halves.  This may "borrow" from the upper half.
+    subb   r1, r3 ; Subtract the upper halves.
+    jnc    @f	  ; If result < 0?
+    xor    r0, r0 ; then iResidue = 0.
+    xor    r1, r1
+@@: ; iResidue >= 0:
+    mov    [CSW_data_residue_lw], r0
+    mov    [CSW_data_residue_uw], r1
     mov    [scsi_state], SCSI_state_CSW ; next SCSI state = CSW
     ret
 ;*****************************************************************************
-
 
 
 ;*****************************************************************************
@@ -410,14 +427,14 @@ send_csw:
 ;*****************************************************************************
 ;; sense key
 SCSI_dw_sense:
+SCSI_dw_sense_lw		dw 0x0000
+SCSI_dw_sense_uw		dw 0x0000
 ;; hex: 00aabbcc, where aa=KEY, bb=ASC, cc=ASCQ
-    dw				0x0000
-    dw				0x0000
-
-    ;; state machine state
+    
+;; state machine state
 scsi_state:
     db				0x00
-    ;; Possible states:
+;; Possible states:
 SCSI_state_CBW		EQU	0x00
 SCSI_state_data_out	EQU	0x01
 SCSI_state_data_in	EQU	0x02
