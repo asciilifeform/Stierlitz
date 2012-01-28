@@ -100,7 +100,7 @@ init_code:
 main_idler:
     call   usb_receive_data ; handle any input from host
     ;; call   rx_handler	    ; process input
-    call   tx_handler	    ; handle any output to host
+    ;; call   tx_handler	    ; handle any output to host
     jmp    [bios_idle_chain]
 ;*****************************************************************************
 
