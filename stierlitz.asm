@@ -33,7 +33,7 @@ ORIGIN equ 0x500
     reloc  ORIGIN            ; Relocate to this symbol
 ;*****************************************************************************
 rom_start:
-    jmp	   begin_code
+    jmp	   init_code
 ;*****************************************************************************
 ;; to save bios handlers
 bios_standard_request_handler:	dw 0xDEAD
@@ -68,7 +68,9 @@ splat:
     ret
 
 ;*****************************************************************************
-begin_code:
+;; Set up BIOS hooks.
+;*****************************************************************************
+init_code:
     ; enable UART debug
     mov    r0, 9		; 19200 baud
     int    KBHIT_INT
@@ -90,15 +92,17 @@ begin_code:
     int    INSERT_IDLE_INT	; insert idle task
     mov    [bios_idle_chain], r0 ; save link to bios idle chain
     ret
+;*****************************************************************************
 
 ;*****************************************************************************
-;; Main Idler
+;; Main Idler - called periodically by the BIOS.
 ;*****************************************************************************
 main_idler:
-    call   poll_receiver	; speak if spoken to
+    call   usb_receive_data ; handle any input from host
+    ;; call   rx_handler	    ; process input
+    call   tx_handler	    ; handle any output to host
     jmp    [bios_idle_chain]
 ;*****************************************************************************
-
 
 ;*****************************************************************************
 ;;;;;; Intercepts
@@ -224,30 +228,32 @@ bulk_send:
 ;*****************************************************************************
 receiver_lock			db 0x00 ; Are we already waiting?
 ;*****************************************************************************
-poll_receiver:
-    cmp     [receiver_lock], 1
-    je      receiver_busy
+usb_receive_data:
+    cmp    [receiver_lock], 1
+    je     receiver_skip
+    cmp    [usbrecv_len], 0	; if receiver is idled (nothing wanted)
+    je     receiver_skip
     ;; Start receive-data:
-    mov    [recv_endpoint], EP_OUT ; Receive from host
-    mov     [receiver_lock], 1	; Lock receiver
-    mov     [usbrecv_link], 0
-    mov     [usbrecv_addr], receive_buffer
-    mov     [usbrecv_call], receiver_done
-    mov     r8, usbrecv_link	; pointer to linker
-    mov     r0, [recv_endpoint] ; from which endpoint to receive
-    int     SUSB2_RECEIVE_INT	; call interrupt
-receiver_busy:
+    mov	   [recv_endpoint], EP_OUT ; Receive from host
+    mov    [receiver_lock], 1	; Lock receiver
+    mov    [usbrecv_link], 0
+    mov    [usbrecv_addr], receive_buffer
+    mov    [usbrecv_call], receiver_done
+    mov    r8, usbrecv_link	; pointer to linker
+    mov    r0, [recv_endpoint] ; from which endpoint to receive
+    int    SUSB2_RECEIVE_INT	; call interrupt
+receiver_skip:
     ret
 
 ;; Callback
 receiver_done:
-    int	    SUSB2_FINISH_INT	; call STATUS phrase
+    int	   SUSB2_FINISH_INT	; call STATUS phrase
     ;; now process the received packet:
-    mov     r0, [recv_endpoint]	; which endpoint we finished receiving from
-    call    process_rx_from_ep  ; process the rx buffer
-    mov     [receiver_lock], 0	; Unlock receiver
+    mov    r0, [recv_endpoint]	; which endpoint we finished receiving from
+    call   process_rx_from_ep  ; process the rx buffer
+    mov    [receiver_lock], 0	; Unlock receiver
     
-    call    splat		; debug
+    call   splat		; debug
     
     ret
 ;*****************************************************************************
@@ -264,7 +270,7 @@ usbrecv_call			dw 0x0000
 ;; Received packet is in receive_buffer.
 ;; Response (if not stall) will be built in send_buffer.
 ;*****************************************************************************
-response_length			dw 0x0000
+;; response_length			dw 0x0000
 ;*****************************************************************************
 process_rx_from_ep:
     ;; Determine what the response should be.
@@ -276,47 +282,43 @@ process_rx_from_ep:
     mov    [scsi_state], SCSI_state_CBW
     mov    r9, [scsi_state]
 scsi_state_0_to_4:
-    shl    r9, 1
+    shl    r9, 1		; table offset times two (addresses are words.)
     jmpl   [r9 + scsi_state_jmp_table]
-
     ;; SCSI State Machine Table
 scsi_state_jmp_table:
-    dw     do_state_CBW
-    dw     do_state_data_out
-    dw     do_state_data_in
-    dw     do_state_CSW
-    dw     do_state_stalled
+    dw     do_rx_state_CBW
+    dw     do_rx_state_data_out
+    dw     do_rx_state_data_in
+    dw     do_rx_state_CSW
+    dw     do_rx_state_stalled
     ;; ------------------------
-do_state_CBW:
+do_rx_state_CBW:
     ;; Check for valid CBW:
     
 
     ret
 
-do_state_data_out:
+do_rx_state_data_out:
 
     ret
 
-do_state_data_in:
+do_rx_state_data_in:
 
     ret
 
-do_state_CSW:
+do_rx_state_CSW:
 
     ret
 
-do_state_stalled:
+do_rx_state_stalled:
 
     ret
 
-    ;; mov	   [send_buffer], 0x00	 ; EP0Buf[0] = 0
-transmit_response:
-    ;; Send the response:
-    mov	   r0, [response_length]
-    mov	   [usbsend_len], r0	 ; # of bytes in response
-    mov    [send_endpoint], EP_IN ; send response to host
-    call   usb_send_data	 ; transmit answer
-    ret
+;; transmit_response:
+;;     ;; Send the response:
+;;     mov	   r0, [response_length]
+;;     call   bulk_send
+;;     ret
 ;*****************************************************************************
 
 ;*****************************************************************************
