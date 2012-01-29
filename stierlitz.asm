@@ -42,9 +42,8 @@ bios_configuration_change:  	dw 0xDEAD
 bios_idle_chain:  		dw 0xDEAD
 
 ;; Endpoints:
-;; EP_IN = 0x81 (ep1), EP_OUT = 0x02 (ep2)
-EP_IN	equ	1
-EP_OUT	equ	2
+EP_IN	equ	1 ; 0x81 (ep1)
+EP_OUT	equ	2 ; 0x02 (ep2)
 
 ;*****************************************************************************
 ;; RS-232 debugger
@@ -98,9 +97,8 @@ init_code:
 ;; Main Idler - called periodically by the BIOS.
 ;*****************************************************************************
 main_idler:
-    call   usb_receive_data ; handle any input from host
-    ;; call   rx_handler	    ; process input
-    ;; call   tx_handler	    ; handle any output to host
+    call   usb_bulk_in_handler ; handle any input from host
+    call   usb_bulk_out_handler ; handle any output to host
     jmp    [bios_idle_chain]
 ;*****************************************************************************
 
@@ -128,8 +126,7 @@ my_class_request_handler: ;; Handle MSC class requests.
     je	   class_req_eq_request_get_max_lun
     ;; none of these:
     ;; jmp    [bios_class_request_handler] ; Carry out BIOS class request handler.
-    ;;; replace BIOS's handler
-    int	   SUSB2_FINISH_INT	; call STATUS phrase
+    int	   SUSB2_FINISH_INT	; replace BIOS's handler: call STATUS phrase
     ret
     ;;; ----------------------
 class_req_eq_request_get_max_lun:
@@ -177,11 +174,11 @@ my_configuration_change:
 ;*****************************************************************************
 ; Variables to keep track of bulk I/O
 ;*****************************************************************************
-dwTransferSize:
+dwTransferSize:			; Total size of data transfer
 dwTransferSize_lw		dw 0x0000
 dwTransferSize_uw		dw 0x0000
 
-dwOffset:
+dwOffset:			; Offset in current data transfer
 dwOffset_lw			dw 0x0000
 dwOffset_uw			dw 0x0000
 ;*****************************************************************************
@@ -192,14 +189,12 @@ dwOffset_uw			dw 0x0000
 usb_send_data:
     mov     [usbsend_link], 0	; must be 0x0000 for send routine
     mov     [usbsend_addr], send_buffer
-    ;; set up callback
-    mov     [usbsend_call], usb_send_done
-    ;; --------
+    mov     [usbsend_call], usb_send_done ;; set up callback
     mov     r8, usbsend_link	; pointer to linker
     mov     r1, [send_endpoint] ; which endpoint to send to
     int     SUSB2_SEND_INT	; call interrupt
     ret
-usb_send_done:
+usb_send_done: ;; Callback
     int	    SUSB2_FINISH_INT	; call STATUS phrase
     ret
 ;*****************************************************************************
@@ -216,48 +211,31 @@ usbsend_call			dw 0x0000
 ; r0 will equal number of bytes which were NOT sent.
 ;*****************************************************************************
 bulk_send:
-    mov	   [usbsend_len], r0	 ; # of bytes in response
-    mov    [send_endpoint], EP_IN ; send response to host
-    call   usb_send_data	 ; transmit answer
-    mov    r0, [usbsend_len]	 ; bytes failed (0 if all were sent.)
+    mov	   [usbsend_len], r0	  ; # of bytes in send_buffer to send
+    mov    [send_endpoint], EP_IN ; send response to host Bulk IN endpoint
+    call   usb_send_data	  ; transmit answer
+    mov    r0, [usbsend_len]	  ; bytes failed (0 if all were sent.)
     ret
 ;*****************************************************************************
 
 ;*****************************************************************************
-;; Poll for received data. EP is in [recv_endpoint].
-;*****************************************************************************
-receiver_lock			db 0x00 ; Are we already waiting?
+; Receive r0 bytes of data from Bulk OUT endpoint into receive_buffer.
+; r0 will equal number of bytes NOT received.
 ;*****************************************************************************
 usb_receive_data:
-    cmp    [receiver_lock], 1
-    je     receiver_skip
-    cmp    [usbrecv_len], 0	; if receiver is idled (nothing wanted)
-    je     receiver_skip
-    ;; Start receive-data:
-    mov	   [recv_endpoint], EP_OUT ; Receive from host
-    mov    [receiver_lock], 1	; Lock receiver
+    mov    [usbrecv_len], r0	; how many bytes to receive
     mov    [usbrecv_link], 0
     mov    [usbrecv_addr], receive_buffer
     mov    [usbrecv_call], receiver_done
     mov    r8, usbrecv_link	; pointer to linker
-    mov    r0, [recv_endpoint] ; from which endpoint to receive
+    mov    r0, EP_OUT           ; from which endpoint to receive
     int    SUSB2_RECEIVE_INT	; call interrupt
-receiver_skip:
     ret
-
-;; Callback
-receiver_done:
+receiver_done: ;; Callback
     int	   SUSB2_FINISH_INT	; call STATUS phrase
-    ;; now process the received packet:
-    mov    r0, [recv_endpoint]	; which endpoint we finished receiving from
-    call   process_rx_from_ep  ; process the rx buffer
-    mov    [receiver_lock], 0	; Unlock receiver
-    
-    call   splat		; debug
-    
+    mov    r0, [usbrecv_len]	; bytes failed (0 if all were received.)
     ret
 ;*****************************************************************************
-recv_endpoint			db 0x00
 ;; Receiver data structure
 usbrecv_link			dw 0x0000
 usbrecv_addr			dw 0x0000
@@ -270,9 +248,7 @@ usbrecv_call			dw 0x0000
 ;; Received packet is in receive_buffer.
 ;; Response (if not stall) will be built in send_buffer.
 ;*****************************************************************************
-;; response_length			dw 0x0000
-;*****************************************************************************
-process_rx_from_ep:
+usb_bulk_in_handler:
     ;; Determine what the response should be.
     ;; This depends first on the SCSI state machine's state.
     mov    r9, [scsi_state]
@@ -293,7 +269,42 @@ scsi_state_jmp_table:
     dw     do_rx_state_stalled
     ;; ------------------------
 do_rx_state_CBW:
+    mov    r0, CBW_Size
+    call   usb_receive_data	; read CBW from host Bulk OUT endpoint
     ;; Check for valid CBW:
+    cmp    r0, 0		; how many bytes (of 31) failed to read?
+    jne    invalid_cbw		; if any unread bytes, invalid.
+    cmp    [MSC_CBW_Signature_lw], CBW_Signature_lw_expected
+    jne    invalid_cbw		; lower word of signature is invalid
+    cmp    [MSC_CBW_Signature_uw], CBW_Signature_uw_expected
+    jne    invalid_cbw		; upper word of signature is invalid
+    cmp    [CBW_lun], 0		; LUN == 0?
+    jne    invalid_cbw		; if not, then CBW is 'not meaningful.'
+    cmp    [CBW_cb_length], 1	; if bCBWCBLength < 1:
+    jb     invalid_cbw		; then invalid
+    cmp    [CBW_cb_length], 16	; if bCBWCBLength > 16:
+    jg     invalid_cbw		; then invalid
+    jmp    valid_cbw ;; CBW is Valid and Meaningful
+invalid_cbw: ;; Or not:
+    call   stall_bulk_in_ep
+    call   stall_bulk_out_ep
+    mov    [scsi_state], SCSI_state_stalled
+    ret
+valid_cbw:
+    ;; clear dwOffset and dwTransferSize:
+    xor    r0, r0
+    mov    w[dwOffset_lw], r0
+    mov    w[dwOffset_uw], r0
+    mov    w[dwTransferSize_lw], r0
+    mov    w[dwTransferSize_uw], r0
+    ;; fHostIN = ((CBW.bmCBWFlags & 0x80) != 0);
+    ;; ...
+    ;; verify request:
+    ;; pbData = SCSIHandleCmd(CBW.CBWCB, CBW.bCBWCBLength, &iLen, &fDevIn);
+    call   SCSI_handle_cmd
+    ;; results in:
+    ;; response_length
+    ;; dev_in_flag
     
 
     ret
@@ -313,37 +324,13 @@ do_rx_state_CSW:
 do_rx_state_stalled:
 
     ret
-
-;; transmit_response:
-;;     ;; Send the response:
-;;     mov	   r0, [response_length]
-;;     call   bulk_send
-;;     ret
 ;*****************************************************************************
 
 ;*****************************************************************************
-;; Verify CBW.
-;; argument: r0 == length of CBW.
-;; returns: r0 = 1 if 'valid and meaningful.' r0 = 0 if otherwise.
+;; Process data sent to bulk endpoint.
 ;*****************************************************************************
-check_cbw:
-    cmp    r0, 31
-    jne    invalid_cbw		; if length != 31, invalid
-    cmp    [MSC_CBW_Signature_lw], CBW_Signature_lw_expected
-    jne    invalid_cbw		; lower word of signature is invalid
-    cmp    [MSC_CBW_Signature_uw], CBW_Signature_uw_expected
-    jne    invalid_cbw		; upper word of signature is invalid
-    cmp    [CBW_lun], 0		; LUN == 0?
-    jne    invalid_cbw		; if not, then CBW is 'not meaningful.'
-    cmp    [CBW_cb_length], 1	; if bCBWCBLength < 1:
-    jb     invalid_cbw		; then invalid
-    cmp    [CBW_cb_length], 16	; if bCBWCBLength > 16:
-    jg     invalid_cbw		; then invalid
-    ;; CBW is Valid and Meaningful:
-    mov    r0, 1
-    ret
-invalid_cbw:
-    mov    r0, 0
+usb_bulk_out_handler:
+
     ret
 ;*****************************************************************************
 
@@ -419,9 +406,113 @@ send_csw:
     ret
 ;*****************************************************************************
 
-
 ;*****************************************************************************
-;; SCSI stuff
+;; SCSI command handler
+;*****************************************************************************
+response_length			dw 0x0000 ; Length of intended response data
+dev_in_flag			db 0x00 ; TRUE if data moving device -> host
+;*****************************************************************************
+; CDB length table:
+aiCDBLen_table:
+    db				6
+    db			       10
+    db			       10
+    db				0
+    db			       16
+    db			       12
+    db				0
+    db			        0
+;*****************************************************************************
+SCSI_handle_cmd:
+    mov    [dev_in_flag], 0x01	; default direction is device -> host
+    ;; bGroupCode = (pCDB->bOperationCode >> 5) & 0x7;
+    mov    r0, [SCSI_CDB6_op_code]
+    shr    r0, 5
+    and    r0, 0x7		       ; bGroupCode
+    mov    r11, r0	               ; table offset
+    add    r11, aiCDBLen_table	       ; table origin
+    xor    r1, r1
+    mov    r1, b[r11]                  ; aiCDBLen[bGroupCode]
+    cmp    [CBW_cb_length], r1	       ; if (CDBLen < aiCDBLen[bGroupCode])
+    jb     bad_scsi_cmd		       ; return NULL (bad cmd)
+    ;; switch(pCDB->bOperationCode)
+    mov    r0, [SCSI_CDB6_op_code]
+    cmp    r0, SCSI_CMD_TEST_UNIT_READY
+    je     SCSI_command_test_unit_ready
+    cmp    r0, SCSI_CMD_REQUEST_SENSE
+    je     SCSI_command_request_sense
+    cmp    r0, SCSI_CMD_FORMAT_UNIT
+    je     SCSI_command_format_unit
+    cmp    r0, SCSI_CMD_INQUIRY
+    je     SCSI_command_inquiry
+    cmp    r0, SCSI_CMD_READ_CAPACITY
+    je     SCSI_command_read_capacity
+    cmp    r0, SCSI_CMD_READ_6 	; ?
+    je     SCSI_command_read_6
+    cmp    r0, SCSI_CMD_READ_10
+    je     SCSI_command_read_10
+    cmp    r0, SCSI_CMD_WRITE_6 ; ?
+    je     SCSI_command_write_6
+    cmp    r0, SCSI_CMD_WRITE_10
+    je     SCSI_command_write_10
+    cmp    r0, SCSI_CMD_VERIFY_10
+    je     SCSI_command_verify_10
+    cmp    r0, SCSI_CMD_REPORT_LUNS
+    je     SCSI_command_report_luns
+scsi_cmd_not_implemented: ;; None of these (unhandled / bad):
+    mov    [SCSI_dw_sense_lw], SENSE_INVALID_CMD_OPCODE_lw
+    mov    [SCSI_dw_sense_uw], SENSE_INVALID_CMD_OPCODE_uw ;; dwSense = INVALID_CMD_OPCODE;
+bad_scsi_cmd:
+    mov    w[response_length], 0x0000 ; return NULL
+    ret
+;; SCSI Command Handlers
+SCSI_command_test_unit_ready:
+    mov    w[response_length], 0x0000
+    ret
+SCSI_command_request_sense:
+    ;; rsplen = min(18, pCDB->bLength)
+    mov    w[response_length], 18
+    xor    r0, r0
+    mov    r0, b[SCSI_CDB6_bLength]
+    cmp    w[response_length], r0
+    jbe    @f
+    mov    w[response_length], r0
+@@:
+    ret
+SCSI_command_format_unit:
+    mov    w[response_length], 0x0000
+    ret
+SCSI_command_inquiry:
+    ;; rsplen = min(36, pCDB->bLength)
+    mov    w[response_length], 36
+    xor    r0, r0
+    mov    r0, b[SCSI_CDB6_bLength]
+    cmp    w[response_length], r0
+    jbe    @f
+    mov    w[response_length], r0
+@@:
+    ret
+SCSI_command_read_capacity:
+    mov    w[response_length], 8    
+    ret
+SCSI_command_read_6:
+    jmp    scsi_cmd_not_implemented ;;;;;; NOT IMPLEMENTED YET ;;;;;;
+    ret
+SCSI_command_read_10:
+    jmp    scsi_cmd_not_implemented ;;;;;; NOT IMPLEMENTED YET ;;;;;;    
+    ret
+SCSI_command_write_6:
+    jmp    scsi_cmd_not_implemented ;;;;;; NOT IMPLEMENTED YET ;;;;;;
+    ret
+SCSI_command_write_10:
+    jmp    scsi_cmd_not_implemented ;;;;;; NOT IMPLEMENTED YET ;;;;;;
+    ret
+SCSI_command_verify_10:
+    jmp    scsi_cmd_not_implemented ;;;;;; NOT IMPLEMENTED YET ;;;;;;
+    ret
+SCSI_command_report_luns:
+    jmp    scsi_cmd_not_implemented ;;;;;; NOT IMPLEMENTED YET ;;;;;;
+    ret
 ;*****************************************************************************
 
 ;*****************************************************************************
@@ -431,8 +522,12 @@ send_csw:
 SCSI_dw_sense:
 SCSI_dw_sense_lw		dw 0x0000
 SCSI_dw_sense_uw		dw 0x0000
+
 ;; hex: 00aabbcc, where aa=KEY, bb=ASC, cc=ASCQ
-    
+dwSense_KEY			EQU	(SCSI_dw_sense + 1)
+dwSense_ASC			EQU	(SCSI_dw_sense + 2)
+dwSense_ASCQ			EQU	(SCSI_dw_sense + 3)
+
 ;; state machine state
 scsi_state:
     db				0x00
@@ -447,6 +542,7 @@ SCSI_state_stalled	EQU	0x04
 ;*****************************************************************************
 ;; SCSI Command Block Wrapper (received)
 ;*****************************************************************************
+CBW_Size			EQU	0x1F
 MSC_CBW_Signature_lw		EQU	(receive_buffer)
 MSC_CBW_Signature_uw		EQU	(receive_buffer + 1)
 CBW_tag_lw			EQU	(receive_buffer + 2)
@@ -460,8 +556,21 @@ CBW_cb				EQU	(receive_buffer + 9)
 ;*****************************************************************************
 
 ;*****************************************************************************
+;; SCSI Command Block (received)
+;*****************************************************************************
+SCSI_CDB6_op_code		EQU	(CBW_cb)
+SCSI_CDB6_LBA_0			EQU	(CBW_cb + 1)
+SCSI_CDB6_LBA_1			EQU	(CBW_cb + 2)
+SCSI_CDB6_LBA_2			EQU	(CBW_cb + 3)
+SCSI_CDB6_LBA_3			EQU	(CBW_cb + 4)
+SCSI_CDB6_bLength		EQU	(CBW_cb + 5)
+SCSI_CDB6_bControl		EQU	(CBW_cb + 6)
+;*****************************************************************************
+
+;*****************************************************************************
 ;; SCSI Command Status Wrapper (to send to host)
 ;*****************************************************************************
+CSW_Size			EQU	0x0D
 MSC_CSW_Signature_lw		EQU	(send_buffer)
 MSC_CSW_Signature_uw		EQU	(send_buffer + 1)
 CSW_tag_lw			EQU	(send_buffer + 2)
