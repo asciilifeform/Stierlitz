@@ -96,9 +96,17 @@ init_code:
 ;*****************************************************************************
 ;; Main Idler - called periodically by the BIOS.
 ;*****************************************************************************
+main_enable			db 0x00
+;*****************************************************************************
 main_idler:
+    ;; cmp    [main_enable], 0 	; global enable toggled by delta_config
+    ;; je     @f			; if disabled, skip MSC routines
+    cmp    [spin_lock], 0	; make sure we aren't spinning...
+    jne    @f			; if we are, skip MSC routines
+    ;; handle MSC:
     call   usb_host_to_dev_handler ; handle any input from host
     call   usb_dev_to_host_handler ; handle any output to host
+@@:
     jmp    [bios_idle_chain]
 ;*****************************************************************************
 
@@ -160,8 +168,8 @@ my_standard_request_handler:
 ;; DELTA_CONFIG_INT vector
 ;*****************************************************************************
 my_configuration_change:
-    ;; we want to enable self when configured?
-    ;; ... for now, do nothing.
+    ;; we want to enable self when configured:
+    mov    [main_enable], 1
     jmp    [bios_configuration_change]
 ;*****************************************************************************
 
@@ -181,22 +189,34 @@ dwTransferSize_uw		dw 0x0000
 dwOffset:			; Offset in current data transfer
 dwOffset_lw			dw 0x0000
 dwOffset_uw			dw 0x0000
+
+spin_lock			db 0x00
 ;*****************************************************************************
 
 ;*****************************************************************************
 ; Transmit usbsend_len bytes to endpoint send_endpoint from send_buffer.
 ;*****************************************************************************
 usb_send_data:
-    mov     [usbsend_link], 0	; must be 0x0000 for send routine
-    mov     [usbsend_addr], send_buffer
-    mov     [usbsend_call], usb_send_done ;; set up callback
-    mov     r8, usbsend_link	; pointer to linker
-    mov     r1, [send_endpoint] ; which endpoint to send to
-    int     SUSB2_SEND_INT	; call interrupt
-    ;; TODO: Do we need to spin here?
+    mov    [spin_lock], 1
+    mov    [usbsend_link], 0	; must be 0x0000 for send routine
+    mov    [usbsend_addr], send_buffer
+    mov    [usbsend_call], usb_send_done ;; set up callback
+    mov    r8, usbsend_link	; pointer to linker
+    mov    r1, [send_endpoint] ; which endpoint to send to
+    int    SUSB2_SEND_INT	; call interrupt
+@@:
+    int    PUSHALL_INT
+    int    IDLE_INT
+    int    POPALL_INT
+    cmp    [spin_lock], 0
+    jne    @b
     ret
 usb_send_done: ;; Callback
-    int	    SUSB2_FINISH_INT	; call STATUS phrase
+    cmp   [send_endpoint], 0
+    jne   @f
+    int   SUSB2_FINISH_INT	; call STATUS phrase (only for ep0)
+@@:
+    mov    [spin_lock], 0
     ret
 ;*****************************************************************************
 send_endpoint			db 0x00
@@ -224,6 +244,7 @@ bulk_send:
 ; r0 will equal number of bytes NOT received.
 ;*****************************************************************************
 usb_receive_data:
+    mov    [spin_lock], 1
     mov    [usbrecv_len], r0	; how many bytes to receive
     mov    [usbrecv_link], 0
     mov    [usbrecv_addr], receive_buffer
@@ -232,9 +253,16 @@ usb_receive_data:
     mov    r0, EP_OUT           ; from which endpoint to receive
     int    SUSB2_RECEIVE_INT	; call interrupt
     ;; TODO: Do we need to spin here?
+@@:
+    int    PUSHALL_INT
+    int    IDLE_INT
+    int    POPALL_INT
+    cmp    [spin_lock], 0
+    jne    @b
     ret
 receiver_done: ;; Callback
-    int	   SUSB2_FINISH_INT	; call STATUS phrase
+    ;; int	   SUSB2_FINISH_INT	; call STATUS phrase (only for ep0 ???)
+    mov    [spin_lock], 0
     mov    r0, [usbrecv_len]	; bytes failed (0 if all were received.)
     ret
 ;*****************************************************************************
