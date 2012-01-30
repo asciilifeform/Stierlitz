@@ -97,8 +97,8 @@ init_code:
 ;; Main Idler - called periodically by the BIOS.
 ;*****************************************************************************
 main_idler:
-    call   usb_bulk_in_handler ; handle any input from host
-    call   usb_bulk_out_handler ; handle any output to host
+    call   usb_host_to_dev_handler ; handle any input from host
+    call   usb_dev_to_host_handler ; handle any output to host
     jmp    [bios_idle_chain]
 ;*****************************************************************************
 
@@ -193,6 +193,7 @@ usb_send_data:
     mov     r8, usbsend_link	; pointer to linker
     mov     r1, [send_endpoint] ; which endpoint to send to
     int     SUSB2_SEND_INT	; call interrupt
+    ;; TODO: Do we need to spin here?
     ret
 usb_send_done: ;; Callback
     int	    SUSB2_FINISH_INT	; call STATUS phrase
@@ -230,6 +231,7 @@ usb_receive_data:
     mov    r8, usbrecv_link	; pointer to linker
     mov    r0, EP_OUT           ; from which endpoint to receive
     int    SUSB2_RECEIVE_INT	; call interrupt
+    ;; TODO: Do we need to spin here?
     ret
 receiver_done: ;; Callback
     int	   SUSB2_FINISH_INT	; call STATUS phrase
@@ -244,24 +246,26 @@ usbrecv_call			dw 0x0000
 ;*****************************************************************************
 
 ;*****************************************************************************
-;; Process data received from an endpoint (bulk.) EP is in R0.
+;; Process data received from bulk OUT endpoint.
 ;; Received packet is in receive_buffer.
 ;; Response (if not stall) will be built in send_buffer.
 ;*****************************************************************************
-usb_bulk_in_handler:
+host_in_flag			db 0x00
+;*****************************************************************************
+usb_host_to_dev_handler:
     ;; Determine what the response should be.
     ;; This depends first on the SCSI state machine's state.
     mov    r9, [scsi_state]
     cmp    r9, 4
-    jle    scsi_state_0_to_4	; make sure state is 0..4
+    jle    scsi_rx_state_0_to_4	; make sure state is 0..4
     ;; recover from weird state - should never get here:
     mov    [scsi_state], SCSI_state_CBW
     mov    r9, [scsi_state]
-scsi_state_0_to_4:
+scsi_rx_state_0_to_4:
     shl    r9, 1		; table offset times two (addresses are words.)
-    jmpl   [r9 + scsi_state_jmp_table]
+    jmpl   [r9 + scsi_rx_state_jmp_table]
     ;; SCSI State Machine Table
-scsi_state_jmp_table:
+scsi_rx_state_jmp_table:
     dw     do_rx_state_CBW
     dw     do_rx_state_data_out
     dw     do_rx_state_data_in
@@ -298,40 +302,226 @@ valid_cbw:
     mov    w[dwTransferSize_lw], r0
     mov    w[dwTransferSize_uw], r0
     ;; fHostIN = ((CBW.bmCBWFlags & 0x80) != 0);
-    ;; ...
-    ;; verify request:
-    ;; pbData = SCSIHandleCmd(CBW.CBWCB, CBW.bCBWCBLength, &iLen, &fDevIn);
-    call   SCSI_handle_cmd
-    ;; results in:
-    ;; response_length
-    ;; dev_in_flag
-    
-
+    mov    [host_in_flag], 0x00
+    mov    r0, [CBW_flags]  ; Whether to stall IN endpoint:
+    test   r0, 0x80         ; Bit 7 = 0 for an OUT (host-to-device) transfer.
+    jz	   @f               ; Bit 7 = 1 for an IN (device-to-host) transfer.
+    mov    [host_in_flag], 0x01
+@@:
+    call   SCSI_handle_cmd  ; pbData = SCSIHandleCmd(CBW.CBWCB, CBW.bCBWCBLength, &iLen, &fDevIn);
+    cmp    [cmd_must_stall_flag], 0x01
+    jne    @f
+    ;; if (pbData == NULL)
+    call   stall_transfer
+    mov    r0, CSW_CMD_FAILED
+    call   send_csw
     ret
-
+@@:
+    ;; if device and host disagree on direction, send Phase Error status.
+    cmp    [response_length], 0
+    je     @f
+    ;; if (response length > 0)
+    mov    r0, [host_in_flag]
+    xor    r0, [dev_in_flag]
+    jz     @f
+    ;; && ((fHostIn && !fDevIn) || (!fHostIn && fDevIn)) then:
+    call   stall_transfer
+    mov    r0, CSW_PHASE_ERROR
+    call   send_csw
+    ret
+@@:
+    ;; if D > H, send Phase Error status.
+    mov    r2, w[response_length] ; R3:R2 = dwTransferSize
+    xor    r3, r3		  ; upper word of iLen fixed to zero - but we will only send single blocks
+    mov    r0, w[CBW_data_transfer_length_lw]
+    mov    r1, w[CBW_data_transfer_length_uw] ; R1:R0 = dwCBWDataTransferLength
+    ;; R1:R0 - R3:R2
+    sub    r0, r2 ; Subtract the lower halves.  This may "borrow" from the upper half.
+    subb   r1, r3 ; Subtract the upper halves.
+    jnc    @f	  ; If result < 0?
+    ;; if (iLen > CBW.dwCBWDataTransferLength) then: negative residue
+    call   stall_transfer
+    mov    r0, CSW_PHASE_ERROR
+    call   send_csw
+    ret
+@@:
+    ;; dwTransferSize = iLen
+    mov    w[dwTransferSize_lw], w[response_length]
+    mov    w[dwTransferSize_uw], 0x0000
+    ;; if ((dwTransferSize ==0) || fDevIn)
+    cmp    w[dwTransferSize_lw], 0x0000
+    je     device_to_host
+    cmp    [dev_in_flag], 0x01
+    je     device_to_host
+    ;; otherwise, data from host to device:
+    mov    [scsi_state], SCSI_state_data_out
+    ret
+device_to_host:
+    mov    [scsi_state], SCSI_state_data_in
+    call   handle_data_in
+    ret
 do_rx_state_data_out:
-
+    call   handle_data_out
     ret
-
 do_rx_state_data_in:
-
-    ret
-
 do_rx_state_CSW:
-
+    ;; iChunk = USBHwEPRead(bEP, NULL, 0); (for debug only?)
+    ;; phrase error:
+    mov    [scsi_state], SCSI_state_CBW
     ret
-
 do_rx_state_stalled:
-
+    call   stall_bulk_out_ep ; if stalled, keep stalling:
     ret
 ;*****************************************************************************
 
 ;*****************************************************************************
-;; Process data sent to bulk endpoint.
+;; Process data sent to bulk IN endpoint.
 ;*****************************************************************************
-usb_bulk_out_handler:
-
+usb_dev_to_host_handler:
+    ;; Determine what the response should be.
+    ;; This depends first on the SCSI state machine's state.
+    mov    r9, [scsi_state]
+    cmp    r9, 4
+    jle    scsi_tx_state_0_to_4	; make sure state is 0..4
+    ;; recover from weird state - should never get here:
+    mov    [scsi_state], SCSI_state_CBW
+    mov    r9, [scsi_state]
+scsi_tx_state_0_to_4:
+    shl    r9, 1		; table offset times two (addresses are words.)
+    jmpl   [r9 + scsi_tx_state_jmp_table]
+    ;; SCSI State Machine Table
+scsi_tx_state_jmp_table:
+    dw     do_tx_state_CBW
+    dw     do_tx_state_data_out
+    dw     do_tx_state_data_in
+    dw     do_tx_state_CSW
+    dw     do_tx_state_stalled
+    ;; ------------------------
+do_tx_state_CBW:
+do_tx_state_data_out:
     ret
+do_tx_state_data_in:
+    call   handle_data_in
+    ret
+do_tx_state_CSW:
+    mov    r0, CSW_Size
+    call   bulk_send  ;; send the CSW:
+    mov    [scsi_state], SCSI_state_CBW
+    ret
+do_tx_state_stalled:
+    call   stall_bulk_in_ep ; if stalled, keep stalling:
+    ret
+;*****************************************************************************
+
+;*****************************************************************************
+iChunk			dw 0x0000
+;*****************************************************************************
+
+;*****************************************************************************
+; Handle SCSI Data Out. (Host to Device)
+;*****************************************************************************
+handle_data_out:
+    mov    r0, w[dwTransferSize_lw]
+    mov    r1, w[dwTransferSize_uw] ; R1:R0 = dwTransferSize
+    mov    r2, w[dwOffset_lw]
+    mov    r3, w[dwOffset_uw] ; R3:R2 = dwOffset
+    ;; R1:R0 - R3:R2
+    sub    r0, r2 ; Subtract the lower halves.  This may "borrow" from the upper half.
+    subb   r1, r3 ; Subtract the upper halves.
+    jc     no_data_out ; if carry, then dwOffset > dwTransferSize
+    ;; if (dwOffset < dwTransferSize)
+    ;; iChunk = USBHwEPRead(bulk_out_ep, pbData, dwTransferSize - dwOffset)
+    ;; r0 already = dwTransferSize - dwOffset
+    call   usb_receive_data ; receive data from host
+    call   SCSI_handle_data
+    cmp    [dat_must_stall_flag], 0x01
+    jne    @f
+    ;; if pbData == NULL:
+    call   stall_transfer
+    mov    r0, CSW_CMD_FAILED
+    call   send_csw
+    ret
+@@:
+    mov    r0, [iChunk]
+    add    [dwOffset_lw], r0    ; dwOffset += iChunk
+    addc   [dwOffset_uw], 0x00 	; add possible carry
+no_data_out:
+    cmp    [dwOffset_lw], w[dwTransferSize_lw]
+    jne    data_out_done
+    cmp    [dwOffset_uw], w[dwTransferSize_uw]
+    jne    data_out_done
+    ;; if (dwOffset == dwTransferSize)
+    mov    r0, w[CBW_data_transfer_length_lw]
+    cmp    w[dwOffset_lw], r0
+    jne    data_out_stall
+    mov    r0, w[CBW_data_transfer_length_uw]
+    cmp    w[dwOffset_uw], r0
+    jne    data_out_stall
+data_out_send_csw:
+    mov    r0, CSW_CMD_PASSED
+    call   send_csw
+data_out_done:
+    ret
+data_out_stall:
+    call   stall_transfer
+    jmp    data_out_send_csw
+;*****************************************************************************
+
+;*****************************************************************************
+; Handle SCSI Data In. (Device to Host)
+;*****************************************************************************
+handle_data_in:
+    call   SCSI_handle_data
+    cmp    [dat_must_stall_flag], 0x01
+    jne    @f
+    ;; pbData == NULL:
+    call   stall_transfer
+    mov    r0, CSW_CMD_FAILED
+    call   send_csw
+    ret
+@@:
+    ;; send data to host?
+    ;; if (dwOffset < dwTransferSize)
+    ;; iChunk = MIN(64, dwTransferSize - dwOffset)
+    mov    [iChunk], 64 	; start with 64
+    mov    r0, w[dwTransferSize_lw]
+    mov    r1, w[dwTransferSize_uw] ; R1:R0 = dwTransferSize
+    mov    r2, w[dwOffset_lw]
+    mov    r3, w[dwOffset_uw] ; R3:R2 = dwOffset
+    ;; R1:R0 - R3:R2
+    sub    r0, r2 ; Subtract the lower halves.  This may "borrow" from the upper half.
+    subb   r1, r3 ; Subtract the upper halves.
+    cmp    r1, 0
+    jne    @f	  ; if upper word of subtraction result is nonzero, then definitely > 64
+    cmp    r0, 64
+    jg     @f	  ; if lower word is greater than 64, then keep iChunk == 64.
+    mov    [iChunk], r0 ; otherwise, iChunk <- r0 (dwTransferSize - dwOffset).
+@@:
+    mov    r0, [iChunk] ; number of bytes to transmit to bulk_in_ep
+    call   bulk_send	; transmit bytes to host
+    mov    r0, [iChunk]
+    add    [dwOffset_lw], r0    ; dwOffset += iChunk
+    addc   [dwOffset_uw], 0x00 	; add possible carry
+    ;; are we done?
+    cmp    [dwOffset_lw], w[dwTransferSize_lw]
+    jne    data_in_done
+    cmp    [dwOffset_uw], w[dwTransferSize_uw]
+    jne    data_in_done
+    ;; if (dwOffset == dwTransferSize)
+    mov    r0, w[CBW_data_transfer_length_lw]
+    cmp    w[dwOffset_lw], r0
+    jne    data_in_stall
+    mov    r0, w[CBW_data_transfer_length_uw]
+    cmp    w[dwOffset_uw], r0
+    jne    data_in_stall
+data_in_send_csw:
+    mov    r0, CSW_CMD_PASSED
+    call   send_csw
+data_in_done:
+    ret
+data_in_stall:
+    call   stall_transfer
+    jmp    data_in_send_csw
 ;*****************************************************************************
 
 ;*****************************************************************************
@@ -411,6 +601,7 @@ send_csw:
 ;*****************************************************************************
 response_length			dw 0x0000 ; Length of intended response data
 dev_in_flag			db 0x00 ; TRUE if data moving device -> host
+cmd_must_stall_flag		db 0x00 ; TRUE if bad command and must stall
 ;*****************************************************************************
 ; CDB length table:
 aiCDBLen_table:
@@ -424,6 +615,7 @@ aiCDBLen_table:
     db			        0
 ;*****************************************************************************
 SCSI_handle_cmd:
+    mov    [cmd_must_stall_flag], 0x00
     mov    [dev_in_flag], 0x01	; default direction is device -> host
     ;; bGroupCode = (pCDB->bOperationCode >> 5) & 0x7;
     mov    r0, [SCSI_CDB6_op_code]
@@ -463,7 +655,8 @@ scsi_cmd_not_implemented: ;; None of these (unhandled / bad):
     mov    [SCSI_dw_sense_lw], SENSE_INVALID_CMD_OPCODE_lw
     mov    [SCSI_dw_sense_uw], SENSE_INVALID_CMD_OPCODE_uw ;; dwSense = INVALID_CMD_OPCODE;
 bad_scsi_cmd:
-    mov    w[response_length], 0x0000 ; return NULL
+    mov    w[response_length], 0x0000
+    mov    [cmd_must_stall_flag], 0x01 ; Must stall
     ret
 ;; SCSI Command Handlers
 SCSI_command_test_unit_ready:
@@ -514,6 +707,132 @@ SCSI_command_report_luns:
     jmp    scsi_cmd_not_implemented ;;;;;; NOT IMPLEMENTED YET ;;;;;;
     ret
 ;*****************************************************************************
+
+;*****************************************************************************
+;; SCSI data handler
+;*****************************************************************************
+dat_must_stall_flag		db 0x00 ; TRUE if bad command and must stall
+;*****************************************************************************
+SCSI_handle_data:
+    mov    [dat_must_stall_flag], 0x00
+    ;; switch(pCDB->bOperationCode)
+    mov    r0, [SCSI_CDB6_op_code]
+    cmp    r0, SCSI_CMD_TEST_UNIT_READY
+    je     SCSI_data_cmd_test_unit_ready
+    cmp    r0, SCSI_CMD_REQUEST_SENSE
+    je     SCSI_data_cmd_request_sense
+    cmp    r0, SCSI_CMD_FORMAT_UNIT
+    je     SCSI_data_cmd_format_unit
+    cmp    r0, SCSI_CMD_INQUIRY
+    je     SCSI_data_cmd_inquiry
+    cmp    r0, SCSI_CMD_READ_CAPACITY
+    je     SCSI_data_cmd_read_capacity
+    cmp    r0, SCSI_CMD_READ_6 	; ?
+    je     SCSI_data_cmd_read_6
+    cmp    r0, SCSI_CMD_READ_10
+    je     SCSI_data_cmd_read_10
+    cmp    r0, SCSI_CMD_WRITE_6 ; ?
+    je     SCSI_data_cmd_write_6
+    cmp    r0, SCSI_CMD_WRITE_10
+    je     SCSI_data_cmd_write_10
+    cmp    r0, SCSI_CMD_VERIFY_10
+    je     SCSI_data_cmd_verify_10
+    cmp    r0, SCSI_CMD_REPORT_LUNS
+    je     SCSI_data_cmd_report_luns
+scsi_data_cmd_not_implemented: ;; None of these (unhandled / bad):
+    mov    [SCSI_dw_sense_lw], SENSE_INVALID_CMD_OPCODE_lw
+    mov    [SCSI_dw_sense_uw], SENSE_INVALID_CMD_OPCODE_uw ;; dwSense = INVALID_CMD_OPCODE;
+bad_scsi_dat_cmd:
+    mov    [dat_must_stall_flag], 0x01 ; Must stall
+    ret
+;; SCSI data command handlers:
+SCSI_data_cmd_test_unit_ready:
+    cmp    [SCSI_dw_sense_lw], 0
+    je     @f
+    cmp    [SCSI_dw_sense_uw], 0
+    je     @f
+    mov    [dat_must_stall_flag], 0x01 ;; if (dwSense !=0) return NULL;
+@@:
+    ret
+SCSI_data_cmd_request_sense:
+    ;; Build reply to request_sense command:
+    mov    [(send_buffer)], 0x70
+    mov    [(send_buffer + 1)], 0x00
+    mov    [(send_buffer + 2)], [dwSense_KEY]
+    mov    [(send_buffer + 3)], 0x00
+    mov    [(send_buffer + 4)], 0x00
+    mov    [(send_buffer + 5)], 0x00
+    mov    [(send_buffer + 6)], 0x00
+    mov    [(send_buffer + 7)], 0x0A
+    mov    [(send_buffer + 8)], 0x00
+    mov    [(send_buffer + 9)], 0x00
+    mov    [(send_buffer + 10)], 0x00
+    mov    [(send_buffer + 11)], 0x00
+    mov    [(send_buffer + 12)], [dwSense_ASC]
+    mov    [(send_buffer + 13)], [dwSense_ASCQ]
+    mov    [(send_buffer + 14)], 0x00
+    mov    [(send_buffer + 15)], 0x00
+    mov    [(send_buffer + 16)], 0x00
+    mov    [(send_buffer + 17)], 0x00
+    ;; reset dwSense
+    xor    r0, r0
+    mov    w[SCSI_dw_sense_lw], r0
+    mov    w[SCSI_dw_sense_uw], r0
+    ret
+SCSI_data_cmd_format_unit:
+    ;; nothing happens
+    ret
+SCSI_data_cmd_inquiry:
+    ;; memcpy(pbData, abInquiry, sizeof(abInquiry))
+    mov    r9, send_buffer
+    mov    r8, SCSI_inquiry_response
+    mov    r1, (INQ_ADD_LEN >> 1) ; number of WORDS to mem_move
+    call   mem_move
+    ret
+SCSI_data_cmd_read_capacity:
+    ;; maximal block:
+    mov    [(send_buffer)], 0x00 ; (MAXBLOCK >> 24) && 0xFF
+    mov    [(send_buffer + 1)], 0x00 ; (MAXBLOCK >> 16) && 0xFF
+    mov    [(send_buffer + 2)], 0x00 ; (MAXBLOCK >> 8) && 0xFF
+    mov    [(send_buffer + 3)], 0x00 ; (MAXBLOCK >> 0) && 0xFF
+    ;; block size:
+    mov    [(send_buffer + 4)], ((BLOCKSIZE >> 24) && 0xFF)
+    mov    [(send_buffer + 5)], ((BLOCKSIZE >> 16) && 0xFF)
+    mov    [(send_buffer + 6)], ((BLOCKSIZE >> 8) && 0xFF)
+    mov    [(send_buffer + 7)], (BLOCKSIZE && 0xFF)
+    ret
+SCSI_data_cmd_read_6:
+    jmp    scsi_data_cmd_not_implemented  ;;;;;; NOT IMPLEMENTED YET ;;;;;;
+    ret
+SCSI_data_cmd_read_10:
+    jmp    scsi_data_cmd_not_implemented  ;;;;;; NOT IMPLEMENTED YET ;;;;;;
+    ret
+SCSI_data_cmd_write_6:
+    jmp    scsi_data_cmd_not_implemented  ;;;;;; NOT IMPLEMENTED YET ;;;;;;
+    ret
+SCSI_data_cmd_write_10:
+    jmp    scsi_data_cmd_not_implemented  ;;;;;; NOT IMPLEMENTED YET ;;;;;;
+    ret
+SCSI_data_cmd_verify_10:
+    ;; nothing happens
+    ret
+SCSI_data_cmd_report_luns:
+    jmp    scsi_data_cmd_not_implemented  ;;;;;; NOT IMPLEMENTED YET ;;;;;;
+    ret
+;*****************************************************************************
+
+;*****************************************************************************
+; mem_move
+; r9 = dest, r8 = src, r1 = word count
+;*****************************************************************************
+mem_move:
+@@:
+    mov    [r9++], [r8++]	; copy data
+    dec    r1
+    jnz    @b
+    ret
+;*****************************************************************************
+
 
 ;*****************************************************************************
 ;; SCSI State

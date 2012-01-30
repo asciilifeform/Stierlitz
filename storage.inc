@@ -3,6 +3,7 @@
 ;*****************************************************************************
 
 BLOCKSIZE			equ	512
+MAXBLOCK			equ	8388608 ; 4GB
 
 ;; SBC2 mandatory SCSI commands
 SCSI_CMD_FORMAT_UNIT		equ	0x04
