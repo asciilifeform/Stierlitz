@@ -74,6 +74,7 @@ ep1:  db 0x07       ; len
       db 0x81       ; bEndpointAddress (EP 1 IN)
       db 0x02	    ; bmAttributes = Bulk
       dw 0x0040     ; packet size = 64 bytes
+      ; dw 0x0200     ; packet size = 512 bytes
       db 0          ; bInterval
 ;; --------------------------------------------------
 ep2:  db 0x07       ; len
@@ -81,6 +82,7 @@ ep2:  db 0x07       ; len
       db 0x02       ; bEndpointAddress (EP 2 OUT)
       db 0x02       ; bmAttributes = Bulk
       dw 0x0040     ; packet size = 64 bytes
+      ; dw 0x0200     ; packet size = 512 bytes
       db 0          ; bInterval
 ;; --------------------------------------------------
 ;================================================
@@ -119,8 +121,8 @@ str3: db STR3_LEN
 STR3_LEN equ ($-str3)
 ;;-----------------------------------------------
 
-bEPAddress       equ 2
-bEPAttribute     equ 3
-wMaxPacketSize   equ 4
-bInterval        equ 6
+; bEPAddress       equ 2
+; bEPAttribute     equ 3
+; wMaxPacketSize   equ 4
+; bInterval        equ 6
       align 2

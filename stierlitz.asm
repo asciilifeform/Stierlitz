@@ -2,8 +2,6 @@
 ;* We are what we pretend to be, so we must be careful about what we pretend to be. *
 ;************************************************************************************
 
-;; TODO: add RS232 debugging?
-
 ;*****************************************************************************
 FW_REV      equ 0x1
 VENDOR_ID   equ 0x08EC 		; "M-Systems Flash Disk"
@@ -45,6 +43,7 @@ bios_idle_chain:  		dw 0xDEAD
 EP_IN	equ	1 ; 0x81 (ep1)
 EP_OUT	equ	2 ; 0x02 (ep2)
 
+
 ;*****************************************************************************
 ;; RS-232 debugger
 ;*****************************************************************************
@@ -61,17 +60,57 @@ dbg_getchar:
     int    UART_INT   ;call UART_INT
     ret    	      ;return character in R0
 
-splat:
-    mov	   r0, 0x48 		; 'H'
+dbg_dump_rx_buffer:
+    xor    r3, r3
+    ;; print newline
+    mov    r0, 0x0D
+    call   dbg_putchar
+    mov    r0, 0x0A
+    call   dbg_putchar
+    ;; dump buffer:
+    mov    r9, 64		; number of bytes to print
+    mov    r8, receive_buffer
+print_byte:
+    addi   r3, 1
+    mov    r7, [r8++] 		; get byte from buffer
+    ;; print upper nibble:
+    mov    r0, r7    
+    shr    r0, 4
+    and    r0, 0x0F
+    call   print_hex_digit
+    ;; print lower nibble:
+    mov    r0, r7
+    and    r0, 0x0F
+    call   print_hex_digit
+    ;; print space between byte values:
+    mov    r0, 0x20
+    call   dbg_putchar
+    ;; print possible EOL (every 16 bytes):
+    mov    r4, r3
+    and    r4, 0x0F
+    jnz    @f
+    mov    r0, 0x0D
+    call   dbg_putchar
+    mov    r0, 0x0A
+    call   dbg_putchar
+@@:
+    dec    r9
+    jnz    print_byte
+    ret
+print_hex_digit:
+    cmp    r0, 0x09
+    jbe    @f
+    add    r0, 0x11
+@@:
+    add    r0, 0x30
     call   dbg_putchar
     ret
-
 ;*****************************************************************************
 ;; Set up BIOS hooks.
 ;*****************************************************************************
 init_code:
-    ; enable UART debug
-    mov    r0, 9		; 19200 baud
+    ;; Enable RS-232 Debug Port.
+    mov    r0, 13		; 9600 baud
     int    KBHIT_INT
 
     ; Update BIOS SIE2 descriptor pointers.
@@ -99,14 +138,20 @@ init_code:
 main_enable			db 0x00
 ;*****************************************************************************
 main_idler:
-    ;; cmp    [main_enable], 0 	; global enable toggled by delta_config
-    ;; je     @f			; if disabled, skip MSC routines
-    cmp    [spin_lock], 0	; make sure we aren't spinning...
-    jne    @f			; if we are, skip MSC routines
+    cmp    [main_enable], 0 	; global enable toggled by delta_config
+    je     skip_main_idler	; if disabled, skip MSC routines
+
+    cmp    [rx_spin_lock], 0	; make sure we aren't spinning...
+    jne    skip_main_idler	; if we are, skip MSC routines
+
+    int    PUSHALL_INT
     ;; handle MSC:
     call   usb_host_to_dev_handler ; handle any input from host
     call   usb_dev_to_host_handler ; handle any output to host
-@@:
+
+    int    POPALL_INT
+    ;; call   splat		; debug
+skip_main_idler:
     jmp    [bios_idle_chain]
 ;*****************************************************************************
 
@@ -190,33 +235,30 @@ dwOffset:			; Offset in current data transfer
 dwOffset_lw			dw 0x0000
 dwOffset_uw			dw 0x0000
 
-spin_lock			db 0x00
 ;*****************************************************************************
+
+align 2
 
 ;*****************************************************************************
 ; Transmit usbsend_len bytes to endpoint send_endpoint from send_buffer.
 ;*****************************************************************************
 usb_send_data:
-    mov    [spin_lock], 1
     mov    [usbsend_link], 0	; must be 0x0000 for send routine
     mov    [usbsend_addr], send_buffer
     mov    [usbsend_call], usb_send_done ;; set up callback
     mov    r8, usbsend_link	; pointer to linker
     mov    r1, [send_endpoint] ; which endpoint to send to
     int    SUSB2_SEND_INT	; call interrupt
-@@:
-    int    PUSHALL_INT
-    int    IDLE_INT
-    int    POPALL_INT
-    cmp    [spin_lock], 0
-    jne    @b
     ret
 usb_send_done: ;; Callback
     cmp   [send_endpoint], 0
     jne   @f
     int   SUSB2_FINISH_INT	; call STATUS phrase (only for ep0)
 @@:
-    mov    [spin_lock], 0
+
+    ;; mov	   r0, 0x0058		; X
+    ;; call   dbg_putchar
+    
     ret
 ;*****************************************************************************
 send_endpoint			db 0x00
@@ -240,11 +282,22 @@ bulk_send:
 ;*****************************************************************************
 
 ;*****************************************************************************
+;; Send short packet (length 0.)
+;*****************************************************************************
+send_short_packet:
+    mov	   r0, 0
+    call   bulk_send
+    ret
+;*****************************************************************************
+
+;*****************************************************************************
 ; Receive r0 bytes of data from Bulk OUT endpoint into receive_buffer.
 ; r0 will equal number of bytes NOT received.
 ;*****************************************************************************
+rx_spin_lock			db 0x00
+;*****************************************************************************
 usb_receive_data:
-    mov    [spin_lock], 1
+    mov    [rx_spin_lock], 1
     mov    [usbrecv_len], r0	; how many bytes to receive
     mov    [usbrecv_link], 0
     mov    [usbrecv_addr], receive_buffer
@@ -252,18 +305,20 @@ usb_receive_data:
     mov    r8, usbrecv_link	; pointer to linker
     mov    r0, EP_OUT           ; from which endpoint to receive
     int    SUSB2_RECEIVE_INT	; call interrupt
-    ;; TODO: Do we need to spin here?
-@@:
-    int    PUSHALL_INT
-    int    IDLE_INT
-    int    POPALL_INT
-    cmp    [spin_lock], 0
-    jne    @b
+;; @@:
+;;     int    PUSHALL_INT
+;;     int    IDLE_INT
+;;     int    POPALL_INT
+    ;; cmp    [rx_spin_lock], 0
+    ;; jne    @b
     ret
 receiver_done: ;; Callback
     ;; int	   SUSB2_FINISH_INT	; call STATUS phrase (only for ep0 ???)
-    mov    [spin_lock], 0
+    mov    [rx_spin_lock], 0
     mov    r0, [usbrecv_len]	; bytes failed (0 if all were received.)
+    ;; ???????????????????????
+    call   send_short_packet
+    ;; ???????????????????????
     ret
 ;*****************************************************************************
 ;; Receiver data structure
@@ -301,8 +356,14 @@ scsi_rx_state_jmp_table:
     dw     do_rx_state_stalled
     ;; ------------------------
 do_rx_state_CBW:
+    mov	   r0, 0x0042		; B
+    call   dbg_putchar
+
     mov    r0, CBW_Size
     call   usb_receive_data	; read CBW from host Bulk OUT endpoint
+
+    call   dbg_dump_rx_buffer	; debug
+    
     ;; Check for valid CBW:
     cmp    r0, 0		; how many bytes (of 31) failed to read?
     jne    invalid_cbw		; if any unread bytes, invalid.
@@ -318,11 +379,17 @@ do_rx_state_CBW:
     jg     invalid_cbw		; then invalid
     jmp    valid_cbw ;; CBW is Valid and Meaningful
 invalid_cbw: ;; Or not:
+    mov	   r0, 0x0043		; C
+    call   dbg_putchar
+
     call   stall_bulk_in_ep
     call   stall_bulk_out_ep
     mov    [scsi_state], SCSI_state_stalled
     ret
 valid_cbw:
+    mov	   r0, 0x0044		; D
+    call   dbg_putchar
+
     ;; clear dwOffset and dwTransferSize:
     xor    r0, r0
     mov    w[dwOffset_lw], r0
@@ -580,7 +647,12 @@ stall_bulk_out_ep: ; Select endpoint 2 (OUT) control register
 stall_bulk_in_ep: ; Select endpoint 1 (IN) control register
     mov    r9, DEV2_EP1_CTL_REG
 set_stall_bit: ; Stall the endpoint:
+    ;; call   send_short_packet
     or     [r9], STALL_EN
+
+    mov	   r0, 0x0053		; S
+    call   dbg_putchar
+
     ret
 ;; ---------------------------------------------------------------------------
 ;; Do we need to clear the stall bit later?
