@@ -40,79 +40,22 @@ bios_configuration_change:  	dw 0xDEAD
 bios_idle_chain:  		dw 0xDEAD
 
 ;; Endpoints:
-EP_IN	equ	1 ; 0x81 (ep1)
-EP_OUT	equ	2 ; 0x02 (ep2)
+EP_IN	equ	0x0001 ; 0x81 (ep1)
+EP_OUT	equ	0x0002 ; 0x02 (ep2)
 
+include debug.inc ;; RS-232 Debugger
 
-;*****************************************************************************
-;; RS-232 debugger
-;*****************************************************************************
-dbg_putchar:
-    push   r2
-    mov    r2, r0
-    mov    r0, 1      ; write to the UART
-    int    UART_INT   ; call UART_INT
-    pop    r2
-    ret
-
-dbg_getchar:
-    xor    r0, r0     ;R0 = read data from the keyboard
-    int    UART_INT   ;call UART_INT
-    ret    	      ;return character in R0
-
-dbg_dump_rx_buffer:
-    xor    r3, r3
-    ;; print newline
-    mov    r0, 0x0D
-    call   dbg_putchar
-    mov    r0, 0x0A
-    call   dbg_putchar
-    ;; dump buffer:
-    mov    r9, 64		; number of bytes to print
-    mov    r8, receive_buffer
-print_byte:
-    addi   r3, 1
-    mov    r7, [r8++] 		; get byte from buffer
-    ;; print upper nibble:
-    mov    r0, r7    
-    shr    r0, 4
-    and    r0, 0x0F
-    call   print_hex_digit
-    ;; print lower nibble:
-    mov    r0, r7
-    and    r0, 0x0F
-    call   print_hex_digit
-    ;; print space between byte values:
-    mov    r0, 0x20
-    call   dbg_putchar
-    ;; print possible EOL (every 16 bytes):
-    mov    r4, r3
-    and    r4, 0x0F
-    jnz    @f
-    mov    r0, 0x0D
-    call   dbg_putchar
-    mov    r0, 0x0A
-    call   dbg_putchar
-@@:
-    dec    r9
-    jnz    print_byte
-    ret
-print_hex_digit:
-    cmp    r0, 0x09
-    jbe    @f
-    add    r0, 0x11
-@@:
-    add    r0, 0x30
-    call   dbg_putchar
-    ret
 ;*****************************************************************************
 ;; Set up BIOS hooks.
 ;*****************************************************************************
 init_code:
-    ;; Enable RS-232 Debug Port.
-    mov    r0, 13		; 9600 baud
-    int    KBHIT_INT
+    call   dbg_enable ; Enable RS-232 Debug Port.
 
+    ;; init:
+    mov    r1, 0		; full speed
+    mov    r2, 2		; SIE2
+    int    SUSB_INIT_INT
+    
     ; Update BIOS SIE2 descriptor pointers.
     mov    [SUSB2_DEV_DESC_VEC], dev_desc
     mov    [SUSB2_CONFIG_DESC_VEC], conf_desc
@@ -144,13 +87,16 @@ main_idler:
     cmp    [rx_spin_lock], 0	; make sure we aren't spinning...
     jne    skip_main_idler	; if we are, skip MSC routines
 
+    cmp    [tx_spin_lock], 0	; make sure we aren't spinning...
+    jne    skip_main_idler	; if we are, skip MSC routines
+
+    
     int    PUSHALL_INT
     ;; handle MSC:
     call   usb_host_to_dev_handler ; handle any input from host
     call   usb_dev_to_host_handler ; handle any output to host
 
     int    POPALL_INT
-    ;; call   splat		; debug
 skip_main_idler:
     jmp    [bios_idle_chain]
 ;*****************************************************************************
@@ -177,8 +123,6 @@ my_class_request_handler: ;; Handle MSC class requests.
     je	   class_req_eq_request_reset
     cmp	   r0, MSC_REQUEST_GET_MAX_LUN
     je	   class_req_eq_request_get_max_lun
-    ;; none of these:
-    ;; jmp    [bios_class_request_handler] ; Carry out BIOS class request handler.
     int	   SUSB2_FINISH_INT	; replace BIOS's handler: call STATUS phrase
     ret
     ;;; ----------------------
@@ -193,6 +137,7 @@ class_req_eq_request_reset:
     mov    [scsi_state], SCSI_state_CBW
     mov    [SCSI_dw_sense_lw], 0x0000
     mov    [SCSI_dw_sense_uw], 0x0000 ; dwSense = 0
+    ;; int	   SUSB2_FINISH_INT
     ;; ----------------------------------
     ;; Done with class request handler
 end_class_request_handler:
@@ -203,19 +148,26 @@ end_class_request_handler:
 ;; STANDARD_INT vector
 ;*****************************************************************************
 my_standard_request_handler:
-    ;; which requests? i.e. STALL?
-    ;; ... for now, do nothing.
-    ;; Carry out BIOS standard request handler.
     jmp    [bios_standard_request_handler]
 ;*****************************************************************************
 
 ;*****************************************************************************
 ;; DELTA_CONFIG_INT vector
 ;*****************************************************************************
+req_wvalue		dw 0x0000
+;*****************************************************************************
 my_configuration_change:
-    ;; we want to enable self when configured:
-    mov    [main_enable], 1
-    jmp    [bios_configuration_change]
+    mov    r8, SIE2_DEV_REQ
+    mov	   r0, w[r8 + wValue]
+    mov    [req_wvalue], r0
+    call   [bios_configuration_change] ; let BIOS configure endpoints...
+    mov	   r0, [req_wvalue]
+    and    r0, 0xFF
+    cmp    r0, 1		; bConfigurationValue
+    jne    @f			; it isn't time yet
+    mov    [main_enable], 1 ; we want to enable self when configured
+@@:
+    ret
 ;*****************************************************************************
 
 ;*****************************************************************************
@@ -239,26 +191,59 @@ dwOffset_uw			dw 0x0000
 
 align 2
 
+
+;*****************************************************************************
+; Transmit zero-length packet.
+;*****************************************************************************
+EP_DIR_IN		EQU	0x04
+EP_ARM			EQU	0x01
+EP_DATA1		EQU	0x40
+EP_ENB			EQU	0x02
+o_cnt			EQU	0x04
+;*****************************************************************************
+send_zlp_ep_in:
+    mov    r9, DEV2_EP1_CTL_REG
+    jmp    send_zlp
+send_zlp_ep_out:
+    mov    r9, DEV2_EP2_CTL_REG
+send_zlp:
+    xor    [r9], EP_DIR_IN	; change dir to IN
+    mov    [r9 + o_cnt], 0	; send zero-length packet
+    or     [r9], (EP_ARM|EP_DATA1|EP_ENB) ; status must be on DATA1
+    ret
+;*****************************************************************************
+
+
 ;*****************************************************************************
 ; Transmit usbsend_len bytes to endpoint send_endpoint from send_buffer.
 ;*****************************************************************************
+tx_spin_lock			db 0x00
+;*****************************************************************************
 usb_send_data:
+    mov    [tx_spin_lock], 1
     mov    [usbsend_link], 0	; must be 0x0000 for send routine
     mov    [usbsend_addr], send_buffer
     mov    [usbsend_call], usb_send_done ;; set up callback
     mov    r8, usbsend_link	; pointer to linker
     mov    r1, [send_endpoint] ; which endpoint to send to
     int    SUSB2_SEND_INT	; call interrupt
+@@:
+    int    PUSHALL_INT
+    int    IDLE_INT
+    int    POPALL_INT
+    cmp    [tx_spin_lock], 0
+    jne    @b
     ret
 usb_send_done: ;; Callback
     cmp   [send_endpoint], 0
     jne   @f
     int   SUSB2_FINISH_INT	; call STATUS phrase (only for ep0)
 @@:
-
-    ;; mov	   r0, 0x0058		; X
-    ;; call   dbg_putchar
+    mov    [tx_spin_lock], 0
     
+    mov	   r0, 0x0054		; T
+    call   dbg_putchar
+
     ret
 ;*****************************************************************************
 send_endpoint			db 0x00
@@ -282,15 +267,6 @@ bulk_send:
 ;*****************************************************************************
 
 ;*****************************************************************************
-;; Send short packet (length 0.)
-;*****************************************************************************
-send_short_packet:
-    mov	   r0, 0
-    call   bulk_send
-    ret
-;*****************************************************************************
-
-;*****************************************************************************
 ; Receive r0 bytes of data from Bulk OUT endpoint into receive_buffer.
 ; r0 will equal number of bytes NOT received.
 ;*****************************************************************************
@@ -298,27 +274,40 @@ rx_spin_lock			db 0x00
 ;*****************************************************************************
 usb_receive_data:
     mov    [rx_spin_lock], 1
+    
     mov    [usbrecv_len], r0	; how many bytes to receive
     mov    [usbrecv_link], 0
     mov    [usbrecv_addr], receive_buffer
     mov    [usbrecv_call], receiver_done
     mov    r8, usbrecv_link	; pointer to linker
-    mov    r0, EP_OUT           ; from which endpoint to receive
+    mov    r1, EP_OUT           ; from which endpoint to receive
     int    SUSB2_RECEIVE_INT	; call interrupt
-;; @@:
-;;     int    PUSHALL_INT
-;;     int    IDLE_INT
-;;     int    POPALL_INT
-    ;; cmp    [rx_spin_lock], 0
-    ;; jne    @b
+    
+@@:
+    int    PUSHALL_INT
+    int    IDLE_INT
+    int    POPALL_INT
+    cmp    [rx_spin_lock], 0
+    jne    @b
     ret
-receiver_done: ;; Callback
-    ;; int	   SUSB2_FINISH_INT	; call STATUS phrase (only for ep0 ???)
+
+receiver_done:
+    mov	   r0, 0x0052		; R
+    call   dbg_putchar
+    mov	   r0, 0x003D		; =
+    call   dbg_putchar
+    
+    mov    r1, [usbrecv_len]
+    call   print_hex_byte	; number of bytes not received
+    call   print_newline
+    
+    call   send_zlp_ep_out 	; send short packet (ACK)
+
+    mov	   r0, 0x005A		; Z
+    call   dbg_putchar
+    
     mov    [rx_spin_lock], 0
     mov    r0, [usbrecv_len]	; bytes failed (0 if all were received.)
-    ;; ???????????????????????
-    call   send_short_packet
-    ;; ???????????????????????
     ret
 ;*****************************************************************************
 ;; Receiver data structure
@@ -647,7 +636,6 @@ stall_bulk_out_ep: ; Select endpoint 2 (OUT) control register
 stall_bulk_in_ep: ; Select endpoint 1 (IN) control register
     mov    r9, DEV2_EP1_CTL_REG
 set_stall_bit: ; Stall the endpoint:
-    ;; call   send_short_packet
     or     [r9], STALL_EN
 
     mov	   r0, 0x0053		; S

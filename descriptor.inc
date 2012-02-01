@@ -4,7 +4,8 @@
 dev_desc:
       db 0x12       ; bLength
       db 0x01       ; bDescriptorType
-      dw 0x0200     ; bcdUSB
+      ; dw 0x0200     ; bcdUSB
+      dw 0x0110     ; bcdUSB
       db 0x00       ; bDeviceClass
       db 0x00       ; bDeviceSubClass
       db 0x00       ; bDeviceProtocol
@@ -57,6 +58,7 @@ bInterfaceProtocol  equ ($-interface_desc)
       db 0x50       ; interface proto (Bulk-Only Transport)
 iInterface          equ ($-interface_desc)
       db 0          ; index of string describing interface
+INTERFACE_DESC_LEN equ ($-interface_desc)
 ;****************************************************************
 ; EZ-Host/EZ-OTG endpoints descriptor
 ;****************************************************************
@@ -117,7 +119,7 @@ STR2_LEN equ ($-str2)
 ;;-----------------------------------------------
 str3: db STR3_LEN
       db 3
-      dw '300K'
+      dw '300'
 STR3_LEN equ ($-str3)
 ;;-----------------------------------------------
 
