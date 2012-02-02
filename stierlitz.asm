@@ -40,8 +40,8 @@ bios_configuration_change:  	dw 0xDEAD
 bios_idle_chain:  		dw 0xDEAD
 
 ;; Endpoints:
-EP_IN	equ	0x0001 ; 0x81 (ep1)
-EP_OUT	equ	0x0002 ; 0x02 (ep2)
+EP_IN	equ	0x01 ; 0x81 (ep1)
+EP_OUT	equ	0x02 ; 0x02 (ep2)
 
 include debug.inc ;; RS-232 Debugger
 
@@ -68,16 +68,12 @@ init_code:
     mov    [(SUSB2_STANDARD_INT*2)], my_standard_request_handler
     mov    [(SUSB2_CLASS_INT*2)], my_class_request_handler
     mov    [(SUSB2_DELTA_CONFIG_INT*2)], my_configuration_change
-    ;; Initialize idler
-    ;; mov    r0, main_idler	; r0 <- new idle task
-    ;; int    INSERT_IDLE_INT	; insert idle task
-    ;; mov    [bios_idle_chain], r0 ; save link to bios idle chain
 
     call   print_newline
     mov	   r0, 0x002A		; *
     call   dbg_putchar
 
-    ;; init timer:
+    ;; Init Timer:
     mov	   [TMR1_IRQ_EN], main_timer ; New Timer1 ISR
     or     [IRQ_EN_REG], 2	     ; enable timer1 interrupt
     
@@ -96,17 +92,14 @@ main_timer:
     or     [IRQ_EN_REG], 2	; enable timer1 interrupt
     sti
     
-    int    PUSHALL_INT
-
     cmp    b[main_enable], 0 	; global enable toggled by delta_config
     je     main_disabled	; if disabled, skip MSC routines
+
+    int    PUSHALL_INT
+
     mov    b[main_enable], 0 	; prevent re-entrance
     
     ;; print SCSI state:
-    xor    r0, r0
-    mov    r0, b[scsi_state]
-    cmp    r0, b[prev_state]
-    je     no_print_state
     call   print_newline
     mov	   r0, 0x0051		; Q
     call   dbg_putchar
@@ -114,10 +107,6 @@ main_timer:
     call   dbg_putchar
     mov    r1, b[scsi_state]
     call   print_hex_byte
-no_print_state:
-    mov    r0, b[scsi_state]
-    mov    b[prev_state], r0
-    ;; ------------------
     
     ;; handle MSC:
     call   usb_host_to_dev_handler ; handle any input from host
@@ -127,8 +116,8 @@ no_print_state:
     call   dbg_putchar
 
     mov    b[main_enable], 1 ; re-enable self
-main_disabled:
     int    POPALL_INT
+main_disabled:
     pop    [CPU_FLAGS_REG]	; restore flags register
     sti
     ret
@@ -253,26 +242,33 @@ send_zlp:
 tx_spin_lock			db 0x00
 ;*****************************************************************************
 usb_send_data:
-    ;; mov    [tx_spin_lock], 1
-    mov    [usbsend_link], 0	; must be 0x0000 for send routine
-    mov    [usbsend_addr], send_buffer
-    mov    [usbsend_call], usb_send_done ;; set up callback
+    and    w[send_endpoint], 0x0F
+    mov    b[tx_spin_lock], 1
+    mov    w[usbsend_link], 0	; must be 0x0000 for send routine
+    mov    w[usbsend_addr], send_buffer
+    mov    w[usbsend_call], usb_send_done ;; set up callback
     mov    r8, usbsend_link	; pointer to linker
-    mov    r1, [send_endpoint] ; which endpoint to send to
+    mov    r1, b[send_endpoint] ; which endpoint to send to
     int    SUSB2_SEND_INT	; call interrupt
 ;; @@:
 ;;     int    PUSHALL_INT
 ;;     int    IDLE_INT
 ;;     int    POPALL_INT
-;;     cmp    [tx_spin_lock], 0
+;;     cmp    b[tx_spin_lock], 0
 ;;     jne    @b
     ret
 usb_send_done: ;; Callback
-    ;; mov    [tx_spin_lock], 0
-    cmp   [send_endpoint], 0
+    mov   b[tx_spin_lock], 0
+    cmp   b[send_endpoint], 0
     jne   @f
     int   SUSB2_FINISH_INT	; call STATUS phrase (only for ep0)
+    ;; ret
 @@:
+    ;; call   send_zlp_ep_in 	; send short packet (ACK)
+
+    mov	   r0, 0x0054		; T
+    call   dbg_putchar
+
     ret
 ;*****************************************************************************
 send_endpoint			db 0x00
@@ -288,10 +284,10 @@ usbsend_call			dw 0x0000
 ; r0 will equal number of bytes which were NOT sent.
 ;*****************************************************************************
 bulk_send:
-    mov	   [usbsend_len], r0	  ; # of bytes in send_buffer to send
-    mov    [send_endpoint], EP_IN ; send response to host Bulk IN endpoint
+    mov	   w[usbsend_len], r0	  ; # of bytes in send_buffer to send
+    mov    b[send_endpoint], EP_IN ; send response to host Bulk IN endpoint
     call   usb_send_data	  ; transmit answer
-    mov    r0, [usbsend_len]	  ; bytes failed (0 if all were sent.)
+    mov    r0, w[usbsend_len]	  ; bytes failed (0 if all were sent.)
     ret
 ;*****************************************************************************
 
@@ -302,26 +298,26 @@ bulk_send:
 rx_spin_lock			db 0x00
 ;*****************************************************************************
 usb_receive_data:
-    mov    [rx_spin_lock], 1
-    mov    [usbrecv_len], r0	; how many bytes to receive
-    mov    [usbrecv_link], 0
-    mov    [usbrecv_addr], receive_buffer
-    mov    [usbrecv_call], receiver_done
+    mov    b[rx_spin_lock], 1
+    mov    w[usbrecv_len], r0	; how many bytes to receive
+    mov    w[usbrecv_link], 0
+    mov    w[usbrecv_addr], receive_buffer
+    mov    w[usbrecv_call], receiver_done
     mov    r8, usbrecv_link	; pointer to linker
     mov    r1, EP_OUT           ; from which endpoint to receive
+    and    r1, 0x0F
     int    SUSB2_RECEIVE_INT	; call interrupt
 @@:
     int    PUSHALL_INT
     int    IDLE_INT
     int    POPALL_INT
-    cmp    [rx_spin_lock], 0
+    cmp    b[rx_spin_lock], 0
     jne    @b
     ret
-
 receiver_done:
-    mov    [rx_spin_lock], 0
+    mov    b[rx_spin_lock], 0
     ;; call   send_zlp_ep_out 	; send short packet (ACK)
-    mov    r0, [usbrecv_len]	; bytes failed (0 if all were received.)
+    mov    r0, w[usbrecv_len]	; bytes failed (0 if all were received.)
     ret
 ;*****************************************************************************
 ;; Receiver data structure
@@ -370,9 +366,9 @@ do_rx_state_CBW:
     ;; Check for valid CBW:
     cmp    r0, 0		; how many bytes (of 31) failed to read?
     jne    invalid_cbw		; if any unread bytes, invalid.
-    cmp    [MSC_CBW_Signature_lw], CBW_Signature_lw_expected
+    cmp    w[MSC_CBW_Signature_lw], CBW_Signature_lw_expected
     jne    invalid_cbw		; lower word of signature is invalid
-    cmp    [MSC_CBW_Signature_uw], CBW_Signature_uw_expected
+    cmp    w[MSC_CBW_Signature_uw], CBW_Signature_uw_expected
     jne    invalid_cbw		; upper word of signature is invalid
     mov    r0, [CBW_lun]
     and    r0, 0x0F
@@ -389,7 +385,7 @@ invalid_cbw: ;; Or not:
 
     call   stall_bulk_in_ep
     call   stall_bulk_out_ep
-    mov    [scsi_state], SCSI_state_stalled
+    mov    b[scsi_state], SCSI_state_stalled
     ret
 valid_cbw:
     mov	   r0, 0x0044		; D
@@ -425,6 +421,7 @@ valid_cbw:
     xor    r0, [dev_in_flag]
     jz     @f
     ;; && ((fHostIn && !fDevIn) || (!fHostIn && fDevIn)) then:
+
     mov	   r0, 0x0031		; 1
     call   dbg_putchar
     
@@ -507,16 +504,30 @@ scsi_tx_state_jmp_table:
     ;; ------------------------
 do_tx_state_CBW:
 do_tx_state_data_out:
+
+    mov	   r0, 0x0075		; u
+    call   dbg_putchar
+
     ret
 do_tx_state_data_in:
+    mov	   r0, 0x0076		; v
+    call   dbg_putchar
+
     call   handle_data_in
     ret
 do_tx_state_CSW:
+    mov	   r0, 0x0077		; w
+    call   dbg_putchar
+
+    xor    r0, r0
     mov    r0, CSW_Size
     call   bulk_send  ;; send the CSW:
     mov    b[scsi_state], SCSI_state_CBW
     ret
 do_tx_state_stalled:
+    mov	   r0, 0x0078		; x
+    call   dbg_putchar
+
     call   stall_bulk_in_ep ; if stalled, keep stalling:
     ret
 ;*****************************************************************************
@@ -550,7 +561,7 @@ handle_data_out:
     call   send_csw
     ret
 @@:
-    mov    r0, [iChunk]
+    mov    r0, w[iChunk]
     add    w[dwOffset_lw], r0    ; dwOffset += iChunk
     addc   w[dwOffset_uw], 0 	; add possible carry
 no_data_out:
@@ -690,6 +701,7 @@ send_csw:
     and    r0, 0xFF
 
     ;; debug
+    call   print_newline
     mov	   r0, 0x0074		; t
     call   dbg_putchar
     mov	   r0, 0x003D		; =
