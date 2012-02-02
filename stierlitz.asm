@@ -80,6 +80,9 @@ init_code:
     ret
 ;*****************************************************************************
 
+;; TODO: find a way to get rid of the timer entirely.
+;; hook rx/tx ints?
+
 ;*****************************************************************************
 ;; Main Timer - called periodically by the BIOS.
 ;*****************************************************************************
@@ -242,6 +245,9 @@ send_zlp:
 tx_spin_lock			db 0x00
 ;*****************************************************************************
 usb_send_data:
+    mov	   r0, 0x0021		; !
+    call   dbg_putchar
+
     and    w[send_endpoint], 0x0F
     mov    b[tx_spin_lock], 1
     mov    w[usbsend_link], 0	; must be 0x0000 for send routine
