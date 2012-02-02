@@ -2,15 +2,20 @@
 ;; RS-232 debugger
 ;*****************************************************************************
 dbg_enable:
+    push   r0
     mov    r0, 13		; 9600 baud
     int    KBHIT_INT
+    pop    r0
     ret
 ;*****************************************************************************
 dbg_putchar:
     push   r2
+    push   r0
+    and    r0, 0xFF
     mov    r2, r0
     mov    r0, 1      ; write to the UART
     int    UART_INT   ; call UART_INT
+    pop    r0
     pop    r2
     ret
 ;*****************************************************************************
@@ -20,6 +25,7 @@ dbg_getchar:
     ret    	      ;return character in R0
 ;*****************************************************************************
 dbg_dump_tx_buffer:
+    int    PUSHALL_INT
     call   print_newline
     mov    r0, 0x54		; 'T'
     call   dbg_putchar
@@ -29,9 +35,11 @@ dbg_dump_tx_buffer:
     mov    r8, send_buffer	; address of buffer
     mov    r9, 64		; number of bytes to print
     call   dbg_dump_buffer
+    int    POPALL_INT
     ret
 ;*****************************************************************************
 dbg_dump_rx_buffer:
+    int    PUSHALL_INT
     call   print_newline
     mov    r0, 0x52		; 'R'
     call   dbg_putchar
@@ -41,14 +49,16 @@ dbg_dump_rx_buffer:
     mov    r8, receive_buffer	; address of buffer
     mov    r9, 64		; number of bytes to print
     call   dbg_dump_buffer
+    int    POPALL_INT
     ret
 ;*****************************************************************************
 dbg_dump_buffer:
     xor    r3, r3
 print_byte:
     addi   r3, 1
-    mov    r1, [r8++] 		; get byte from buffer
+    mov    r1, b[r8] 		; get byte from buffer
     call   print_hex_byte	; print byte as hex
+    addi   r8, 1
     mov    r0, 0x20
     call   dbg_putchar 		; print space between byte values:
     mov    r4, r3
@@ -78,9 +88,11 @@ print_hex_digit:
     ret
 ;*****************************************************************************
 print_newline:
+    push   r0
     mov    r0, 0x0D
     call   dbg_putchar
     mov    r0, 0x0A
     call   dbg_putchar
+    pop    r0
     ret
 ;*****************************************************************************
