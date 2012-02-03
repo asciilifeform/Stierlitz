@@ -91,23 +91,20 @@ prev_state			db 0x00
 ;*****************************************************************************
 main_timer:
     push   [CPU_FLAGS_REG]	; push flags register
-    mov    [TMR1_REG], 0xFFFF	; reload timer 1
-    or     [IRQ_EN_REG], 2	; enable timer1 interrupt
+    int    PUSHALL_INT
+    and    [IRQ_EN_REG], !2	; disable timer1 interrupt
     sti
-    
+
     cmp    b[main_enable], 0 	; global enable toggled by delta_config
     je     main_disabled	; if disabled, skip MSC routines
-
-    int    PUSHALL_INT
-
-    mov    b[main_enable], 0 	; prevent re-entrance
-    
+ 
     ;; print SCSI state:
     call   print_newline
     mov	   r0, 0x0051		; Q
     call   dbg_putchar
     mov	   r0, 0x003D		; =
     call   dbg_putchar
+    xor    r1, r1
     mov    r1, b[scsi_state]
     call   print_hex_byte
     
@@ -118,9 +115,10 @@ main_timer:
     mov	   r0, 0x002E		; .
     call   dbg_putchar
 
-    mov    b[main_enable], 1 ; re-enable self
-    int    POPALL_INT
 main_disabled:
+    mov    [TMR1_REG], 0xFFFF	; reload timer 1
+    or     [IRQ_EN_REG], 2	; enable timer1 interrupt
+    int    POPALL_INT
     pop    [CPU_FLAGS_REG]	; restore flags register
     sti
     ret
@@ -153,10 +151,13 @@ my_class_request_handler: ;; Handle MSC class requests.
     ;;; ----------------------
 class_req_eq_request_get_max_lun:
     ;; No LUNs on this device, so send back a zero:
-    mov	   [send_buffer], 0x00	 ; EP0Buf[0] = 0
-    mov	   [usbsend_len], 0x0001 ; send 1 byte
-    mov	   [send_endpoint], 0x00 ; to endpoint 0
-    call   usb_send_data	 ; transmit
+    mov	   [ctlsend_addr], ctlsend_buffer ; address of buffer
+    mov	   [ctlsend_buffer], 0x0000 ; EP0Buf[0] = 0
+    mov	   [ctlsend_len], 0x0001 ; send 1 byte
+    mov    [ctlsend_call], 0x0000 ; no callback
+    mov    r8, ctlsend_link	; pointer to linker
+    mov    r1, 0x0000 		; which endpoint to send to
+    int    SUSB2_SEND_INT	; call interrupt
     jmp	   end_class_request_handler
 class_req_eq_request_reset:
     mov    b[scsi_state], SCSI_state_CBW
@@ -167,6 +168,14 @@ class_req_eq_request_reset:
     ;; Done with class request handler
 end_class_request_handler:
     ret
+;*****************************************************************************
+;; CTL Send data structure
+align 2
+ctlsend_link			dw 0x0000
+ctlsend_addr			dw 0x0000
+ctlsend_len			dw 0x0000
+ctlsend_call			dw 0x0000
+ctlsend_buffer			dw 0x0000
 ;*****************************************************************************
 
 ;*****************************************************************************
@@ -180,8 +189,16 @@ my_standard_request_handler:
 ;; DELTA_CONFIG_INT vector
 ;*****************************************************************************
 req_wvalue		dw 0x0000
+
+
+conf_count		dw 0x0000
 ;*****************************************************************************
 my_configuration_change:
+    push   [CPU_FLAGS_REG]	; push flags register
+    int    PUSHALL_INT
+
+    addi   [conf_count], 1
+    
     mov    r8, SIE2_DEV_REQ
     mov	   r0, w[r8 + wValue]
     mov    [req_wvalue], r0
@@ -190,8 +207,14 @@ my_configuration_change:
     and    r0, 0xFF
     cmp    r0, 1 ; [bConfigurationValue]
     jne    @f			; it isn't time yet
+
+    cmp    b[conf_count], 4
+    jb     @f
+    
     mov    [main_enable], 1 ; we want to enable self when configured
 @@:
+    int    POPALL_INT
+    pop    [CPU_FLAGS_REG]	; push flags register
     ret
 ;*****************************************************************************
 
@@ -243,42 +266,30 @@ send_zlp:
 ; Transmit usbsend_len bytes to endpoint send_endpoint from send_buffer.
 ;*****************************************************************************
 tx_spin_lock			db 0x00
+align 2
 ;*****************************************************************************
 usb_send_data:
-    mov	   r0, 0x0021		; !
-    call   dbg_putchar
-
-    and    w[send_endpoint], 0x0F
-    mov    b[tx_spin_lock], 1
     mov    w[usbsend_link], 0	; must be 0x0000 for send routine
     mov    w[usbsend_addr], send_buffer
     mov    w[usbsend_call], usb_send_done ;; set up callback
+    mov    b[tx_spin_lock], 1
     mov    r8, usbsend_link	; pointer to linker
-    mov    r1, b[send_endpoint] ; which endpoint to send to
+    xor    r1, r1
+    mov    r1, EP_IN ; which endpoint to send to
     int    SUSB2_SEND_INT	; call interrupt
-;; @@:
-;;     int    PUSHALL_INT
-;;     int    IDLE_INT
-;;     int    POPALL_INT
-;;     cmp    b[tx_spin_lock], 0
-;;     jne    @b
+@@:
+    int    PUSHALL_INT
+    int    IDLE_INT
+    int    POPALL_INT
+    cmp    b[tx_spin_lock], 0
+    je     @b
     ret
 usb_send_done: ;; Callback
     mov   b[tx_spin_lock], 0
-    cmp   b[send_endpoint], 0
-    jne   @f
-    int   SUSB2_FINISH_INT	; call STATUS phrase (only for ep0)
-    ;; ret
-@@:
-    ;; call   send_zlp_ep_in 	; send short packet (ACK)
-
-    mov	   r0, 0x0054		; T
-    call   dbg_putchar
-
     ret
 ;*****************************************************************************
-send_endpoint			db 0x00
 ;; Send data structure
+align 2
 usbsend_link			dw 0x0000
 usbsend_addr			dw 0x0000
 usbsend_len			dw 0x0000
@@ -286,13 +297,31 @@ usbsend_call			dw 0x0000
 ;*****************************************************************************
 
 ;*****************************************************************************
-; Transmit r0 bytes from send_buffer to host via EP_IN.
+; Transmit [usbsend_len] bytes from send_buffer to host via EP_IN.
 ; r0 will equal number of bytes which were NOT sent.
 ;*****************************************************************************
 bulk_send:
-    mov	   w[usbsend_len], r0	  ; # of bytes in send_buffer to send
-    mov    b[send_endpoint], EP_IN ; send response to host Bulk IN endpoint
+    ;; debug
+    int    PUSHALL_INT
+    call   print_newline
+    mov	   r0, 0x006e		; n
+    call   dbg_putchar
+    mov	   r0, 0x003D		; =
+    call   dbg_putchar
+    mov    r1, [usbsend_len]
+    and    r1, 0xFF
+    call   print_hex_byte
+    call   print_newline
+    call   dbg_dump_tx_buffer	; debug
+    int    POPALL_INT
+    ;; debug    
+
     call   usb_send_data	  ; transmit answer
+    
+    ;; push   r0
+    ;; call   send_zlp_ep_in 	; send short packet (ACK)
+    ;; pop    r0
+    
     mov    r0, w[usbsend_len]	  ; bytes failed (0 if all were sent.)
     ret
 ;*****************************************************************************
@@ -302,6 +331,7 @@ bulk_send:
 ; r0 will equal number of bytes NOT received.
 ;*****************************************************************************
 rx_spin_lock			db 0x00
+align 2
 ;*****************************************************************************
 usb_receive_data:
     mov    b[rx_spin_lock], 1
@@ -331,6 +361,7 @@ usbrecv_link			dw 0x0000
 usbrecv_addr			dw 0x0000
 usbrecv_len			dw 0x0000
 usbrecv_call			dw 0x0000
+align 2
 ;*****************************************************************************
 
 ;*****************************************************************************
@@ -339,6 +370,7 @@ usbrecv_call			dw 0x0000
 ;; Response (if not stall) will be built in send_buffer.
 ;*****************************************************************************
 host_in_flag			db 0x00
+align 2
 ;*****************************************************************************
 usb_host_to_dev_handler:
     ;; Determine what the response should be.
@@ -427,10 +459,6 @@ valid_cbw:
     xor    r0, [dev_in_flag]
     jz     @f
     ;; && ((fHostIn && !fDevIn) || (!fHostIn && fDevIn)) then:
-
-    mov	   r0, 0x0031		; 1
-    call   dbg_putchar
-    
     call   stall_transfer
     mov    r0, CSW_PHASE_ERROR
     call   send_csw
@@ -446,10 +474,6 @@ valid_cbw:
     subb   r1, r3 ; Subtract the upper halves.
     jnc    @f	  ; If result < 0?
     ;; if (iLen > CBW.dwCBWDataTransferLength) then: negative residue
-
-    mov	   r0, 0x0032		; 2
-    call   dbg_putchar
-    
     call   stall_transfer
     mov    r0, CSW_PHASE_ERROR
     call   send_csw
@@ -458,6 +482,21 @@ valid_cbw:
     ;; dwTransferSize = iLen
     mov    w[dwTransferSize_lw], w[response_length]
     mov    w[dwTransferSize_uw], 0x0000
+
+    ;; debug
+    int    PUSHALL_INT
+    call   print_newline
+    mov	   r0, 0x0067		; g
+    call   dbg_putchar
+    mov	   r0, 0x003D		; =
+    call   dbg_putchar
+    xor    r1, r1
+    mov    r1, b[dev_in_flag]
+    call   print_hex_byte
+    call   print_newline
+    int    POPALL_INT
+    ;; debug
+    
     ;; if ((dwTransferSize ==0) || fDevIn)
     cmp    w[dwTransferSize_lw], 0x0000
     je     device_to_host
@@ -525,8 +564,7 @@ do_tx_state_CSW:
     mov	   r0, 0x0077		; w
     call   dbg_putchar
 
-    xor    r0, r0
-    mov    r0, CSW_Size
+    mov	   w[usbsend_len], CSW_Size
     call   bulk_send  ;; send the CSW:
     mov    b[scsi_state], SCSI_state_CBW
     ret
@@ -540,6 +578,7 @@ do_tx_state_stalled:
 
 ;*****************************************************************************
 iChunk			dw 0x0000
+align 2
 ;*****************************************************************************
 
 ;*****************************************************************************
@@ -568,7 +607,7 @@ handle_data_out:
     ret
 @@:
     mov    r0, w[iChunk]
-    add    w[dwOffset_lw], r0    ; dwOffset += iChunk
+    add    w[dwOffset_lw], r0   ; dwOffset += iChunk
     addc   w[dwOffset_uw], 0 	; add possible carry
 no_data_out:
     cmp    w[dwOffset_lw], w[dwTransferSize_lw]
@@ -623,7 +662,13 @@ handle_data_in:
     mov    w[iChunk], r0 ; otherwise, iChunk <- r0 (dwTransferSize - dwOffset).
 @@:
     mov    r0, w[iChunk] ; number of bytes to transmit to bulk_in_ep
+    mov	   w[usbsend_len], r0
+
+    mov	   r0, 0x0059		; Y
+    call   dbg_putchar
+    
     call   bulk_send	; transmit bytes to host
+    
     mov    r0, w[iChunk]
     add    w[dwOffset_lw], r0    ; dwOffset += iChunk
     addc   w[dwOffset_uw], 0 	 ; add possible carry
@@ -703,18 +748,21 @@ set_stall_bit: ; Stall the endpoint:
 ;; argument: r0 = bStatus
 ;*****************************************************************************
 send_csw:
-    mov    b[CSW_status], r0
     and    r0, 0xFF
+    mov    b[CSW_status], r0
 
     ;; debug
+    int    PUSHALL_INT
     call   print_newline
     mov	   r0, 0x0074		; t
     call   dbg_putchar
     mov	   r0, 0x003D		; =
     call   dbg_putchar
-    mov    r1, b[scsi_state]
+    xor    r1, r1
+    mov    r1, b[CSW_status]
     call   print_hex_byte
     call   print_newline
+    int    POPALL_INT
     ;; debug    
     
     mov    w[MSC_CSW_Signature_lw], CSW_Signature_lw_expected ; signature lower word
@@ -745,6 +793,7 @@ send_csw:
 response_length			dw 0x0000 ; Length of intended response data
 dev_in_flag			db 0x00 ; TRUE if data moving device -> host
 cmd_must_stall_flag		db 0x00 ; TRUE if bad command and must stall
+align 2
 ;*****************************************************************************
 ; CDB length table:
 aiCDBLen_table:
@@ -756,13 +805,14 @@ aiCDBLen_table:
     db			       12
     db				0
     db			        0
+align 2
 ;*****************************************************************************
 SCSI_handle_cmd:
     mov    b[cmd_must_stall_flag], 0x00
     mov    b[dev_in_flag], 0x01	; default direction is device -> host
     ;; bGroupCode = (pCDB->bOperationCode >> 5) & 0x7;
     xor    r0, r0
-    mov    r0, b[SCSI_CDB6_op_code]
+    mov    r0, b[Common_SCSI_CDB_op_code]
     shr    r0, 5
     and    r0, 0x7		       ; bGroupCode
     mov    r11, r0	               ; table offset
@@ -773,7 +823,7 @@ SCSI_handle_cmd:
     jb     bad_scsi_cmd		       ; return NULL (bad cmd)
     ;; switch(pCDB->bOperationCode)
     xor    r0, r0
-    mov    r0, b[SCSI_CDB6_op_code]
+    mov    r0, b[Common_SCSI_CDB_op_code]
     cmp    r0, SCSI_CMD_TEST_UNIT_READY
     je     SCSI_command_test_unit_ready
     cmp    r0, SCSI_CMD_REQUEST_SENSE
@@ -811,7 +861,7 @@ SCSI_command_request_sense:
     ;; rsplen = min(18, pCDB->bLength)
     mov    w[response_length], 18
     xor    r0, r0
-    mov    r0, b[SCSI_CDB6_bLength]
+    mov    r0, b[Request_Sense_SCSI_CDB_bLength]
     cmp    w[response_length], r0
     jbe    @f
     mov    w[response_length], r0
@@ -824,7 +874,7 @@ SCSI_command_inquiry:
     ;; rsplen = min(36, pCDB->bLength)
     mov    w[response_length], 36
     xor    r0, r0
-    mov    r0, b[SCSI_CDB6_bLength]
+    mov    r0, b[Inquiry_SCSI_CDB_bLength]
     cmp    w[response_length], r0
     jbe    @f
     mov    w[response_length], r0
@@ -857,12 +907,13 @@ SCSI_command_report_luns:
 ;; SCSI data handler
 ;*****************************************************************************
 dat_must_stall_flag		db 0x00 ; TRUE if bad command and must stall
+align 2
 ;*****************************************************************************
 SCSI_handle_data:
     mov    b[dat_must_stall_flag], 0x00
     ;; switch(pCDB->bOperationCode)
     xor    r0, r0
-    mov    r0, b[SCSI_CDB6_op_code]
+    mov    r0, b[Common_SCSI_CDB_op_code]
     cmp    r0, SCSI_CMD_TEST_UNIT_READY
     je     SCSI_data_cmd_test_unit_ready
     cmp    r0, SCSI_CMD_REQUEST_SENSE
@@ -1024,19 +1075,51 @@ CBW_cb				EQU	(receive_buffer + 15)
 ;*****************************************************************************
 ;; SCSI Command Block (received)
 ;*****************************************************************************
-SCSI_CDB6_op_code		EQU	(CBW_cb)
-SCSI_CDB6_LBA_0			EQU	(CBW_cb + 1)
-SCSI_CDB6_LBA_1			EQU	(CBW_cb + 2)
-SCSI_CDB6_LBA_2			EQU	(CBW_cb + 3)
-SCSI_CDB6_LBA_3			EQU	(CBW_cb + 4)
-SCSI_CDB6_bLength		EQU	(CBW_cb + 5)
-SCSI_CDB6_bControl		EQU	(CBW_cb + 6)
+;; SCSI_CDB6_op_code		EQU	(CBW_cb)
+;; SCSI_CDB6_LBA_3			EQU	(CBW_cb + 1)
+;; SCSI_CDB6_LBA_2			EQU	(CBW_cb + 2)
+;; SCSI_CDB6_LBA_1			EQU	(CBW_cb + 3)
+;; SCSI_CDB6_LBA_0			EQU	(CBW_cb + 4)
+;; SCSI_CDB6_bLength		EQU	(CBW_cb + 5)
+;; SCSI_CDB6_bControl		EQU	(CBW_cb + 6)
 ;*****************************************************************************
+
+;*****************************************************************************
+;; All SCSI Command CDBs
+;*****************************************************************************
+Common_SCSI_CDB_op_code		EQU	(CBW_cb)
+;*****************************************************************************
+
+;*****************************************************************************
+;; 'Inquiry' SCSI Command
+;*****************************************************************************
+Inquiry_SCSI_CDB_bLength	EQU	(CBW_cb + 4)
+;*****************************************************************************
+
+;*****************************************************************************
+;; 'Request Sense' SCSI Command
+;*****************************************************************************
+Request_Sense_SCSI_CDB_bLength	EQU	(CBW_cb + 4)
+;*****************************************************************************
+
+;*****************************************************************************
+;; 'Read-10' SCSI Command
+;*****************************************************************************
+Read10_SCSI_CDB_LUN_etc		EQU	(CBW_cb + 1)
+Read10_SCSI_CDB_LBA_3		EQU	(CBW_cb + 2)
+Read10_SCSI_CDB_LBA_2		EQU	(CBW_cb + 3)
+Read10_SCSI_CDB_LBA_1		EQU	(CBW_cb + 4)
+Read10_SCSI_CDB_LBA_0		EQU	(CBW_cb + 5)
+Read10_SCSI_CDB_Transfer_Len_1	EQU	(CBW_cb + 7)
+Read10_SCSI_CDB_Transfer_Len_0	EQU	(CBW_cb + 8)
+;*****************************************************************************
+
+
 
 ;*****************************************************************************
 ;; SCSI Command Status Wrapper (to send to host)
 ;*****************************************************************************
-CSW_Size			EQU	0x0D
+CSW_Size			EQU	13
 MSC_CSW_Signature_lw		EQU	(send_buffer)
 MSC_CSW_Signature_uw		EQU	(send_buffer + 2)
 CSW_tag_lw			EQU	(send_buffer + 4)
@@ -1049,6 +1132,7 @@ CSW_status			EQU	(send_buffer + 12)
 ;*****************************************************************************
 ;; Inquiry Response
 ;*****************************************************************************
+align 2
 SCSI_inquiry_response:
     db		0x00		; Device = Direct Access
     db		0x80		; RMB = 1: Removable Medium
