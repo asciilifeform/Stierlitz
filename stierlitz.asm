@@ -989,10 +989,10 @@ SCSI_data_cmd_inquiry:
     ret
 SCSI_data_cmd_read_capacity:
     ;; maximal block:
-    mov    b[(send_buffer)], 0x00 ; (MAXBLOCK >> 24) && 0xFF
-    mov    b[(send_buffer + 1)], 0x00 ; (MAXBLOCK >> 16) && 0xFF
-    mov    b[(send_buffer + 2)], 0x00 ; (MAXBLOCK >> 8) && 0xFF
-    mov    b[(send_buffer + 3)], 0x00 ; (MAXBLOCK >> 0) && 0xFF
+    mov    b[(send_buffer)], 0x00 ;; ((MAXBLOCK >> 24) && 0xFF)
+    mov    b[(send_buffer + 1)], 0x80 ;; ((MAXBLOCK >> 16) && 0xFF)
+    mov    b[(send_buffer + 2)], 0x00 ;; ((MAXBLOCK >> 8) && 0xFF)
+    mov    b[(send_buffer + 3)], 0x00 ;; ((MAXBLOCK >> 0) && 0xFF)
     ;; block size:
     mov    b[(send_buffer + 4)], ((BLOCKSIZE >> 24) && 0xFF)
     mov    b[(send_buffer + 5)], ((BLOCKSIZE >> 16) && 0xFF)
