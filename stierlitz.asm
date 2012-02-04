@@ -7,6 +7,10 @@ FW_REV      equ 0x1
 VENDOR_ID   equ 0x08EC 		; "M-Systems Flash Disk"
 PRODUCT_ID  equ 0x0020		; "TravelDrive"
 
+TMR_INTERVAL equ 0xFFFF
+;; TMR_INTERVAL equ 10000
+
+
 ORIGIN equ 0x500
 
 .xlist
@@ -45,6 +49,8 @@ EP_OUT	equ	0x02 ; 0x02 (ep2)
 
 include debug.inc ;; RS-232 Debugger
 
+;; TODO: enable watchdog timer?
+
 ;*****************************************************************************
 ;; Set up BIOS hooks.
 ;*****************************************************************************
@@ -76,12 +82,50 @@ init_code:
     ;; Init Timer:
     mov	   [TMR1_IRQ_EN], main_timer ; New Timer1 ISR
     or     [IRQ_EN_REG], 2	     ; enable timer1 interrupt
+
+    ;; Init Idler:
+    ;; mov    r0, main_idler ; r0 <- new idle task
+    ;; int    INSERT_IDLE_INT ; insert idle task
+    ;; mov    w[bios_idle_chain], r0 ; save link to bios idle chain
     
     ret
 ;*****************************************************************************
 
-;; TODO: find a way to get rid of the timer entirely.
-;; hook rx/tx ints?
+
+;*****************************************************************************
+;; Main Idler - called periodically by the BIOS.
+;*****************************************************************************
+;; idle_lock			db 0x00
+;; align 2
+;; ;*****************************************************************************
+;; main_idler:
+;;     push   [CPU_FLAGS_REG]	; push flags register
+;;     int    PUSHALL_INT
+    
+;;     cmp    b[idle_lock], 0
+;;     jne    switched_off
+
+;;     mov    b[idle_lock], 0x01
+    
+;;     cmp    b[main_enable], 0 	; global enable toggled by delta_config
+;;     je     switched_off		; if disabled, skip MSC routines
+;;     cmp    b[rx_spin_lock], 0
+;;     jne    switched_off
+;;     cmp    b[tx_spin_lock], 0
+;;     jne    switched_off
+
+;;     mov	   r0, 0x002E		; .
+;;     call   dbg_putchar
+
+;;     call   usb_host_to_dev_handler ; handle any input from host
+;;     call   usb_dev_to_host_handler ; handle any output to host
+;; switched_off:
+;;     mov    b[idle_lock], 0x00
+;;     int    POPALL_INT
+;;     pop    [CPU_FLAGS_REG]	; restore flags register
+;;     jmp    [bios_idle_chain]
+;*****************************************************************************
+
 
 ;*****************************************************************************
 ;; Main Timer - called periodically by the BIOS.
@@ -108,7 +152,6 @@ main_timer:
     mov    r1, b[scsi_state]
     call   print_hex_byte
     
-    ;; handle MSC:
     call   usb_host_to_dev_handler ; handle any input from host
     call   usb_dev_to_host_handler ; handle any output to host
     
@@ -116,7 +159,7 @@ main_timer:
     call   dbg_putchar
 
 main_disabled:
-    mov    [TMR1_REG], 0xFFFF	; reload timer 1
+    mov    [TMR1_REG], TMR_INTERVAL	; reload timer 1
     or     [IRQ_EN_REG], 2	; enable timer1 interrupt
     int    POPALL_INT
     pop    [CPU_FLAGS_REG]	; restore flags register
@@ -160,6 +203,7 @@ class_req_eq_request_get_max_lun:
     int    SUSB2_SEND_INT	; call interrupt
     jmp	   end_class_request_handler
 class_req_eq_request_reset:
+    ;; TODO: implement genuine reset of EVERYTHING...
     mov    b[scsi_state], SCSI_state_CBW
     mov    [SCSI_dw_sense_lw], 0x0000
     mov    [SCSI_dw_sense_uw], 0x0000 ; dwSense = 0
@@ -189,8 +233,6 @@ my_standard_request_handler:
 ;; DELTA_CONFIG_INT vector
 ;*****************************************************************************
 req_wvalue		dw 0x0000
-
-
 conf_count		dw 0x0000
 ;*****************************************************************************
 my_configuration_change:
@@ -301,28 +343,30 @@ usbsend_call			dw 0x0000
 ; r0 will equal number of bytes which were NOT sent.
 ;*****************************************************************************
 bulk_send:
-    ;; debug
     int    PUSHALL_INT
     call   print_newline
     mov	   r0, 0x006e		; n
     call   dbg_putchar
     mov	   r0, 0x003D		; =
     call   dbg_putchar
-    mov    r1, [usbsend_len]
+    mov    r1, w[usbsend_len]
+    shr    r1, 8
+    and    r1, 0xFF
+    call   print_hex_byte
+    mov    r1, w[usbsend_len]
     and    r1, 0xFF
     call   print_hex_byte
     call   print_newline
-    call   dbg_dump_tx_buffer	; debug
+    ;; call   dbg_dump_tx_buffer	; debug
     int    POPALL_INT
-    ;; debug    
 
-    call   usb_send_data	  ; transmit answer
-    
+    call   usb_send_data	; transmit answer
+
     ;; push   r0
     ;; call   send_zlp_ep_in 	; send short packet (ACK)
     ;; pop    r0
     
-    mov    r0, w[usbsend_len]	  ; bytes failed (0 if all were sent.)
+    mov    r0, w[usbsend_len]	; bytes failed (0 if all were sent.)
     ret
 ;*****************************************************************************
 
@@ -397,9 +441,9 @@ do_rx_state_CBW:
     mov    r0, CBW_Size
     call   usb_receive_data	; read CBW from host Bulk OUT endpoint
 
-    push   r0
-    call   dbg_dump_rx_buffer	; debug
-    pop    r0
+    ;; push   r0
+    ;; call   dbg_dump_rx_buffer	; debug
+    ;; pop    r0
     
     ;; Check for valid CBW:
     cmp    r0, 0		; how many bytes (of 31) failed to read?
@@ -418,17 +462,11 @@ do_rx_state_CBW:
     jg     invalid_cbw		; then invalid
     jmp    valid_cbw ;; CBW is Valid and Meaningful
 invalid_cbw: ;; Or not:
-    mov	   r0, 0x0043		; C
-    call   dbg_putchar
-
     call   stall_bulk_in_ep
     call   stall_bulk_out_ep
     mov    b[scsi_state], SCSI_state_stalled
     ret
 valid_cbw:
-    mov	   r0, 0x0044		; D
-    call   dbg_putchar
-
     ;; clear dwOffset and dwTransferSize:
     xor    r0, r0
     mov    w[dwOffset_lw], r0
@@ -452,26 +490,30 @@ valid_cbw:
     ret
 @@:
     ;; if device and host disagree on direction, send Phase Error status.
-    cmp    w[response_length], 0
-    je     @f
+    cmp    w[response_length_uw], 0
+    jne    yes_response
+    cmp    w[response_length_lw], 0
+    je     no_disagree
+yes_response:
     ;; if (response length > 0)
     mov    r0, [host_in_flag]
     xor    r0, [dev_in_flag]
-    jz     @f
+    jz     no_disagree
     ;; && ((fHostIn && !fDevIn) || (!fHostIn && fDevIn)) then:
     call   stall_transfer
     mov    r0, CSW_PHASE_ERROR
     call   send_csw
     ret
-@@:
+no_disagree:
     ;; if D > H, send Phase Error status.
-    mov    r2, w[response_length] ; R3:R2 = dwTransferSize
-    xor    r3, r3		  ; upper word of iLen fixed to zero - but we will only send single blocks
+    mov    r2, w[response_length_lw] ; R3:R2 = dwTransferSize
+    mov    r3, w[response_length_uw] ; upper word of response length
     mov    r0, w[CBW_data_transfer_length_lw]
     mov    r1, w[CBW_data_transfer_length_uw] ; R1:R0 = dwCBWDataTransferLength
     ;; R1:R0 - R3:R2
-    sub    r0, r2 ; Subtract the lower halves.  This may "borrow" from the upper half.
-    subb   r1, r3 ; Subtract the upper halves.
+    ;; sub    r0, r2 ; Subtract the lower halves.  This may "borrow" from the upper half.
+    ;; subb   r1, r3 ; Subtract the upper halves.
+    call   subtract_16
     jnc    @f	  ; If result < 0?
     ;; if (iLen > CBW.dwCBWDataTransferLength) then: negative residue
     call   stall_transfer
@@ -480,26 +522,15 @@ valid_cbw:
     ret
 @@:
     ;; dwTransferSize = iLen
-    mov    w[dwTransferSize_lw], w[response_length]
-    mov    w[dwTransferSize_uw], 0x0000
-
-    ;; debug
-    int    PUSHALL_INT
-    call   print_newline
-    mov	   r0, 0x0067		; g
-    call   dbg_putchar
-    mov	   r0, 0x003D		; =
-    call   dbg_putchar
-    xor    r1, r1
-    mov    r1, b[dev_in_flag]
-    call   print_hex_byte
-    call   print_newline
-    int    POPALL_INT
-    ;; debug
-    
-    ;; if ((dwTransferSize ==0) || fDevIn)
+    mov    w[dwTransferSize_lw], w[response_length_lw]
+    mov    w[dwTransferSize_uw], w[response_length_uw]
+    ;; if ((dwTransferSize == 0) || fDevIn)
     cmp    w[dwTransferSize_lw], 0x0000
-    je     device_to_host
+    jne    @f
+    cmp    w[dwTransferSize_lw], 0x0000
+    jne    @f
+    jmp    device_to_host
+@@:
     cmp    b[dev_in_flag], 0x01
     je     device_to_host
     ;; otherwise, data from host to device:
@@ -514,9 +545,12 @@ do_rx_state_data_out:
     ret
 do_rx_state_data_in:
 do_rx_state_CSW:
+    mov	   r0, 0x0023		; #
+    call   dbg_putchar
+
     ;; iChunk = USBHwEPRead(bEP, NULL, 0); (for debug only?)
     ;; phrase error:
-    mov    b[scsi_state], SCSI_state_CBW
+    ;; mov    b[scsi_state], SCSI_state_CBW
     ret
 do_rx_state_stalled:
     call   stall_bulk_out_ep ; if stalled, keep stalling:
@@ -549,29 +583,16 @@ scsi_tx_state_jmp_table:
     ;; ------------------------
 do_tx_state_CBW:
 do_tx_state_data_out:
-
-    mov	   r0, 0x0075		; u
-    call   dbg_putchar
-
     ret
 do_tx_state_data_in:
-    mov	   r0, 0x0076		; v
-    call   dbg_putchar
-
     call   handle_data_in
     ret
 do_tx_state_CSW:
-    mov	   r0, 0x0077		; w
-    call   dbg_putchar
-
     mov	   w[usbsend_len], CSW_Size
     call   bulk_send  ;; send the CSW:
     mov    b[scsi_state], SCSI_state_CBW
     ret
 do_tx_state_stalled:
-    mov	   r0, 0x0078		; x
-    call   dbg_putchar
-
     call   stall_bulk_in_ep ; if stalled, keep stalling:
     ret
 ;*****************************************************************************
@@ -590,8 +611,9 @@ handle_data_out:
     mov    r2, w[dwOffset_lw]
     mov    r3, w[dwOffset_uw] ; R3:R2 = dwOffset
     ;; R1:R0 - R3:R2
-    sub    r0, r2 ; Subtract the lower halves.  This may "borrow" from the upper half.
-    subb   r1, r3 ; Subtract the upper halves.
+    ;; sub    r0, r2 ; Subtract the lower halves.  This may "borrow" from the upper half.
+    ;; subb   r1, r3 ; Subtract the upper halves.
+    call   subtract_16
     jc     no_data_out ; if carry, then dwOffset > dwTransferSize
     ;; if (dwOffset < dwTransferSize)
     ;; iChunk = USBHwEPRead(bulk_out_ep, pbData, dwTransferSize - dwOffset)
@@ -653,25 +675,104 @@ handle_data_in:
     mov    r2, w[dwOffset_lw]
     mov    r3, w[dwOffset_uw] ; R3:R2 = dwOffset
     ;; R1:R0 - R3:R2
-    sub    r0, r2 ; Subtract the lower halves.  This may "borrow" from the upper half.
-    subb   r1, r3 ; Subtract the upper halves.
+    ;; sub    r0, r2 ; Subtract the lower halves.  This may "borrow" from the upper half.
+    ;; subb   r1, r3 ; Subtract the upper halves.
+    call   subtract_16
     cmp    r1, 0
     jne    @f	  ; if upper word of subtraction result is nonzero, then definitely > 64
     cmp    r0, 64
     jg     @f	  ; if lower word is greater than 64, then keep iChunk == 64.
     mov    w[iChunk], r0 ; otherwise, iChunk <- r0 (dwTransferSize - dwOffset).
 @@:
+
+    int    PUSHALL_INT
+    call   print_newline
+    mov	   r0, 0x0043		; C
+    call   dbg_putchar
+    mov	   r0, 0x004C		; L
+    call   dbg_putchar
+    mov	   r0, 0x003D		; =
+    call   dbg_putchar
+    mov    r1, w[iChunk]
+    shr    r1, 8
+    and    r1, 0xFF
+    call   print_hex_byte
+    mov    r1, w[iChunk]
+    and    r1, 0xFF
+    call   print_hex_byte
+    call   print_newline
+    int    POPALL_INT
+
     mov    r0, w[iChunk] ; number of bytes to transmit to bulk_in_ep
     mov	   w[usbsend_len], r0
-
-    mov	   r0, 0x0059		; Y
-    call   dbg_putchar
-    
     call   bulk_send	; transmit bytes to host
-    
     mov    r0, w[iChunk]
     add    w[dwOffset_lw], r0    ; dwOffset += iChunk
     addc   w[dwOffset_uw], 0 	 ; add possible carry
+    
+    int    PUSHALL_INT
+    call   print_newline
+    mov	   r0, 0x004F		; O
+    call   dbg_putchar
+    mov	   r0, 0x004C		; L
+    call   dbg_putchar
+    mov	   r0, 0x003D		; =
+    call   dbg_putchar
+    mov    r1, w[dwOffset_lw]
+    shr    r1, 8
+    and    r1, 0xFF
+    call   print_hex_byte
+    mov    r1, w[dwOffset_lw]
+    and    r1, 0xFF
+    call   print_hex_byte
+    call   print_newline
+    mov	   r0, 0x004F		; O
+    call   dbg_putchar
+    mov	   r0, 0x0055		; U
+    call   dbg_putchar
+    mov	   r0, 0x003D		; =
+    call   dbg_putchar
+    mov    r1, w[dwOffset_uw]
+    shr    r1, 8
+    and    r1, 0xFF
+    call   print_hex_byte
+    mov    r1, w[dwOffset_uw]
+    and    r1, 0xFF
+    call   print_hex_byte
+    call   print_newline
+
+
+    call   print_newline
+    mov	   r0, 0x0054		; T
+    call   dbg_putchar
+    mov	   r0, 0x004C		; L
+    call   dbg_putchar
+    mov	   r0, 0x003D		; =
+    call   dbg_putchar
+    mov    r1, w[CBW_data_transfer_length_lw]
+    shr    r1, 8
+    and    r1, 0xFF
+    call   print_hex_byte
+    mov    r1, w[CBW_data_transfer_length_lw]
+    and    r1, 0xFF
+    call   print_hex_byte
+    call   print_newline
+    mov	   r0, 0x0054		; T
+    call   dbg_putchar
+    mov	   r0, 0x0055		; U
+    call   dbg_putchar
+    mov	   r0, 0x003D		; =
+    call   dbg_putchar
+    mov    r1, w[CBW_data_transfer_length_lw]
+    shr    r1, 8
+    and    r1, 0xFF
+    call   print_hex_byte
+    mov    r1, w[CBW_data_transfer_length_lw]
+    and    r1, 0xFF
+    call   print_hex_byte
+    call   print_newline
+    int    POPALL_INT
+
     ;; are we done?
     cmp    w[dwOffset_lw], w[dwTransferSize_lw]
     jne    data_in_done
@@ -690,6 +791,10 @@ data_in_send_csw:
 data_in_done:
     ret
 data_in_stall:
+
+    mov	   r0, 0x0024		; $
+    call   dbg_putchar
+
     call   stall_transfer
     jmp    data_in_send_csw
 ;*****************************************************************************
@@ -775,8 +880,9 @@ send_csw:
     mov    r0, w[CBW_data_transfer_length_lw]
     mov    r1, w[CBW_data_transfer_length_uw] ; R1:R0 = dwCBWDataTransferLength
     ;; R1:R0 - R3:R2
-    sub    r0, r2 ; Subtract the lower halves.  This may "borrow" from the upper half.
-    subb   r1, r3 ; Subtract the upper halves.
+    ;; sub    r0, r2 ; Subtract the lower halves.  This may "borrow" from the upper half.
+    ;; subb   r1, r3 ; Subtract the upper halves.
+    call   subtract_16
     jnc    @f	  ; If result < 0?
     xor    r0, r0 ; then iResidue = 0.
     xor    r1, r1
@@ -784,13 +890,44 @@ send_csw:
     mov    w[CSW_data_residue_lw], r0
     mov    w[CSW_data_residue_uw], r1
     mov    b[scsi_state], SCSI_state_CSW ; next SCSI state = CSW
+
+    int    PUSHALL_INT
+    call   print_newline
+    mov	   r0, 0x004C		; L
+    call   dbg_putchar
+    mov	   r0, 0x003D		; =
+    call   dbg_putchar
+    mov    r1, w[CSW_data_residue_lw]
+    shr    r1, 8
+    and    r1, 0xFF
+    call   print_hex_byte
+    mov    r1, w[CSW_data_residue_lw]
+    and    r1, 0xFF
+    call   print_hex_byte
+    call   print_newline
+    mov	   r0, 0x0055		; U
+    call   dbg_putchar
+    mov	   r0, 0x003D		; =
+    call   dbg_putchar
+    mov    r1, w[CSW_data_residue_uw]
+    shr    r1, 8
+    and    r1, 0xFF
+    call   print_hex_byte
+    mov    r1, w[CSW_data_residue_uw]
+    and    r1, 0xFF
+    call   print_hex_byte
+    call   print_newline
+    int    POPALL_INT
+
+    
     ret
 ;*****************************************************************************
 
 ;*****************************************************************************
 ;; SCSI command handler
 ;*****************************************************************************
-response_length			dw 0x0000 ; Length of intended response data
+response_length_lw		dw 0x0000 ; Length of intended response data
+response_length_uw		dw 0x0000 ; Length of intended response data - Upper Word
 dev_in_flag			db 0x00 ; TRUE if data moving device -> host
 cmd_must_stall_flag		db 0x00 ; TRUE if bad command and must stall
 align 2
@@ -808,11 +945,14 @@ aiCDBLen_table:
 align 2
 ;*****************************************************************************
 SCSI_handle_cmd:
-    mov    b[cmd_must_stall_flag], 0x00
+    mov    w[response_length_lw], 0x0000 ; default - no data
+    mov    w[response_length_uw], 0x0000 ; default - no data
+    mov    b[cmd_must_stall_flag], 0x00	 ; default - no stall
     mov    b[dev_in_flag], 0x01	; default direction is device -> host
     ;; bGroupCode = (pCDB->bOperationCode >> 5) & 0x7;
     xor    r0, r0
     mov    r0, b[Common_SCSI_CDB_op_code]
+    clc
     shr    r0, 5
     and    r0, 0x7		       ; bGroupCode
     mov    r11, r0	               ; table offset
@@ -832,13 +972,17 @@ SCSI_handle_cmd:
     je     SCSI_command_format_unit
     cmp    r0, SCSI_CMD_INQUIRY
     je     SCSI_command_inquiry
+    cmp    r0, SCSI_CMD_MODE_SENSE6
+    je     SCSI_command_mode_sense_6
+    cmp    r0, SCSI_CMD_P_OR_A_MEDIUM_RMVL
+    je     SCSI_command_p_or_a_medium_rmvl
     cmp    r0, SCSI_CMD_READ_CAPACITY
     je     SCSI_command_read_capacity
-    cmp    r0, SCSI_CMD_READ_6 	; ?
+    cmp    r0, SCSI_CMD_READ_6
     je     SCSI_command_read_6
     cmp    r0, SCSI_CMD_READ_10
     je     SCSI_command_read_10
-    cmp    r0, SCSI_CMD_WRITE_6 ; ?
+    cmp    r0, SCSI_CMD_WRITE_6
     je     SCSI_command_write_6
     cmp    r0, SCSI_CMD_WRITE_10
     je     SCSI_command_write_10
@@ -850,44 +994,67 @@ scsi_cmd_not_implemented: ;; None of these (unhandled / bad):
     mov    w[SCSI_dw_sense_lw], SENSE_INVALID_CMD_OPCODE_lw
     mov    w[SCSI_dw_sense_uw], SENSE_INVALID_CMD_OPCODE_uw ;; dwSense = INVALID_CMD_OPCODE;
 bad_scsi_cmd:
-    mov    w[response_length], 0x0000
     mov    b[cmd_must_stall_flag], 0x01 ; Must stall
     ret
+;; bad_field:
+;;     mov    w[SCSI_dw_sense_lw], SENSE_INVALID_FIELD_IN_CDB_lw
+;;     mov    w[SCSI_dw_sense_uw], SENSE_INVALID_FIELD_IN_CDB_uw
+;;     jmp    bad_scsi_cmd
 ;; SCSI Command Handlers
 SCSI_command_test_unit_ready:
-    mov    w[response_length], 0x0000
     ret
 SCSI_command_request_sense:
     ;; rsplen = min(18, pCDB->bLength)
-    mov    w[response_length], 18
+    mov    w[response_length_uw], 0x0000
+    mov    w[response_length_lw], 18
     xor    r0, r0
     mov    r0, b[Request_Sense_SCSI_CDB_bLength]
-    cmp    w[response_length], r0
+    cmp    w[response_length_lw], r0
     jbe    @f
-    mov    w[response_length], r0
+    mov    w[response_length_lw], r0
 @@:
     ret
 SCSI_command_format_unit:
-    mov    w[response_length], 0x0000
     ret
 SCSI_command_inquiry:
     ;; rsplen = min(36, pCDB->bLength)
-    mov    w[response_length], 36
+    mov    w[response_length_uw], 0x0000
+    mov    w[response_length_lw], 36
     xor    r0, r0
     mov    r0, b[Inquiry_SCSI_CDB_bLength]
-    cmp    w[response_length], r0
+    cmp    w[response_length_lw], r0
     jbe    @f
-    mov    w[response_length], r0
+    mov    w[response_length_lw], r0
 @@:
     ret
+SCSI_command_mode_sense_6:
+    jmp    scsi_cmd_not_implemented ;;;;;; NOT IMPLEMENTED YET ;;;;;;
+    ;; mov    w[response_length_uw], 0x0000
+    ;; mov    w[response_length_lw], 8
+    ret
+SCSI_command_p_or_a_medium_rmvl:
+    ret
 SCSI_command_read_capacity:
-    mov    w[response_length], 8    
+    mov    w[response_length_uw], 0x0000
+    mov    w[response_length_lw], 8
     ret
 SCSI_command_read_6:
     jmp    scsi_cmd_not_implemented ;;;;;; NOT IMPLEMENTED YET ;;;;;;
     ret
 SCSI_command_read_10:
-    jmp    scsi_cmd_not_implemented ;;;;;; NOT IMPLEMENTED YET ;;;;;;    
+    ;; Calculate response length: BLOCKSIZE will always be 512
+    xor    r0, r0 ; will be lower word of rsplen
+    xor    r1, r1 ; will be upper word of rsplen
+    mov    r1, b[Read10_SCSI_CDB_Transfer_Len_1] ; upper byte of transfer length
+    shl    r1, 1				 ; shift by 1 (already shifted by 8)
+    mov    r0, b[Read10_SCSI_CDB_Transfer_Len_0] ; lower byte of transfer length
+    shl    r0, 8
+    clc
+    shl    r0, 1
+    addc   r1, 0 ; if carry, set low bit of upper word of result
+    ;; now, rsplen = dwLen * 512
+    mov    w[response_length_lw], r0
+    mov    w[response_length_uw], r1
     ret
 SCSI_command_write_6:
     jmp    scsi_cmd_not_implemented ;;;;;; NOT IMPLEMENTED YET ;;;;;;
@@ -922,13 +1089,17 @@ SCSI_handle_data:
     je     SCSI_data_cmd_format_unit
     cmp    r0, SCSI_CMD_INQUIRY
     je     SCSI_data_cmd_inquiry
+    cmp    r0, SCSI_CMD_MODE_SENSE6
+    je     SCSI_data_cmd_mode_sense_6
+    cmp    r0, SCSI_CMD_P_OR_A_MEDIUM_RMVL
+    je     SCSI_data_cmd_p_or_a_medium_rmvl
     cmp    r0, SCSI_CMD_READ_CAPACITY
     je     SCSI_data_cmd_read_capacity
-    cmp    r0, SCSI_CMD_READ_6 	; ?
+    cmp    r0, SCSI_CMD_READ_6
     je     SCSI_data_cmd_read_6
     cmp    r0, SCSI_CMD_READ_10
     je     SCSI_data_cmd_read_10
-    cmp    r0, SCSI_CMD_WRITE_6 ; ?
+    cmp    r0, SCSI_CMD_WRITE_6
     je     SCSI_data_cmd_write_6
     cmp    r0, SCSI_CMD_WRITE_10
     je     SCSI_data_cmd_write_10
@@ -942,6 +1113,14 @@ scsi_data_cmd_not_implemented: ;; None of these (unhandled / bad):
 bad_scsi_dat_cmd:
     mov    b[dat_must_stall_flag], 0x01 ; Must stall
     ret
+scsi_read_error:
+    mov    w[SCSI_dw_sense_lw], SENSE_READ_ERROR_lw
+    mov    w[SCSI_dw_sense_uw], SENSE_READ_ERROR_uw
+    jmp    bad_scsi_dat_cmd
+scsi_write_error:
+    mov    w[SCSI_dw_sense_lw], SENSE_WRITE_ERROR_lw
+    mov    w[SCSI_dw_sense_uw], SENSE_WRITE_ERROR_uw
+    jmp    bad_scsi_dat_cmd
 ;; SCSI data command handlers:
 SCSI_data_cmd_test_unit_ready:
     cmp    w[SCSI_dw_sense_lw], 0
@@ -976,8 +1155,7 @@ SCSI_data_cmd_request_sense:
     mov    w[SCSI_dw_sense_lw], r0
     mov    w[SCSI_dw_sense_uw], r0
     ret
-SCSI_data_cmd_format_unit:
-    ;; nothing happens
+SCSI_data_cmd_format_unit: ;; nothing happens
     ret
 SCSI_data_cmd_inquiry:
     ;; memcpy(pbData, abInquiry, sizeof(abInquiry))
@@ -986,6 +1164,18 @@ SCSI_data_cmd_inquiry:
     xor    r1, r1
     mov    r1, (INQ_ADD_LEN >> 1) ; number of WORDS to mem_move
     call   mem_move
+    ret
+SCSI_data_cmd_mode_sense_6:
+    ;; mov    b[(send_buffer)], 0x03 ; Number of bytes which follow
+    ;; mov    b[(send_buffer + 1)], 0x00 ; Medium Type: 00h for SBC devices.
+    ;; mov    b[(send_buffer + 2)], 0x00 ; Device-Specific Parameter - no WP, no cache
+    ;; mov    b[(send_buffer + 3)], 0x00 ; No mode-parameter block descriptors.
+    ;; mov    b[(send_buffer + 4)], 0x00 ; No blocks
+    ;; mov    b[(send_buffer + 5)], 0x00 ; No blocks
+    ;; mov    b[(send_buffer + 6)], 0x00 ; No blocks
+    ;; mov    b[(send_buffer + 7)], 0x00 ; No blocks
+    ret
+SCSI_data_cmd_p_or_a_medium_rmvl: ;; nothing happens
     ret
 SCSI_data_cmd_read_capacity:
     ;; maximal block:
@@ -1003,7 +1193,15 @@ SCSI_data_cmd_read_6:
     jmp    scsi_data_cmd_not_implemented  ;;;;;; NOT IMPLEMENTED YET ;;;;;;
     ret
 SCSI_data_cmd_read_10:
-    jmp    scsi_data_cmd_not_implemented  ;;;;;; NOT IMPLEMENTED YET ;;;;;;
+    ;; TODO: Calculate LBA
+    ;; Calculate current offset into buffer:
+    ;; dwBufPos = (dwOffset & (BLOCKSIZE - 1))
+
+    ;; if (dwBufPos == 0) then read new block:
+    ;; ...
+
+
+    ;; jmp    scsi_data_cmd_not_implemented  ;;;;;; NOT IMPLEMENTED YET ;;;;;;
     ret
 SCSI_data_cmd_write_6:
     jmp    scsi_data_cmd_not_implemented  ;;;;;; NOT IMPLEMENTED YET ;;;;;;
@@ -1032,6 +1230,27 @@ mem_move:
 ;*****************************************************************************
 
 
+;*****************************************************************************
+; subtract (16-bit)
+; R1:R0 - R3:R2
+;*****************************************************************************
+subtract_16:
+    push   r4
+    xor    r4, r4
+    sub    r0, r2 ; Subtract the lower halves.  This may "borrow" from the upper half.
+    jnc    @f
+    mov    r4, 1
+@@:
+    subb   r1, r3 ; Subtract the upper halves.
+    jc     @f	  ; Carry set from subtracting upper halves?
+    test   r4, 1  ; If not, see if carry was set from subtracting lower halves:
+    jz     @f
+    stc
+@@:
+    pop    r4
+    ret
+;*****************************************************************************
+    
 ;*****************************************************************************
 ;; SCSI State
 ;*****************************************************************************
@@ -1073,18 +1292,6 @@ CBW_cb				EQU	(receive_buffer + 15)
 ;*****************************************************************************
 
 ;*****************************************************************************
-;; SCSI Command Block (received)
-;*****************************************************************************
-;; SCSI_CDB6_op_code		EQU	(CBW_cb)
-;; SCSI_CDB6_LBA_3			EQU	(CBW_cb + 1)
-;; SCSI_CDB6_LBA_2			EQU	(CBW_cb + 2)
-;; SCSI_CDB6_LBA_1			EQU	(CBW_cb + 3)
-;; SCSI_CDB6_LBA_0			EQU	(CBW_cb + 4)
-;; SCSI_CDB6_bLength		EQU	(CBW_cb + 5)
-;; SCSI_CDB6_bControl		EQU	(CBW_cb + 6)
-;*****************************************************************************
-
-;*****************************************************************************
 ;; All SCSI Command CDBs
 ;*****************************************************************************
 Common_SCSI_CDB_op_code		EQU	(CBW_cb)
@@ -1113,8 +1320,6 @@ Read10_SCSI_CDB_LBA_0		EQU	(CBW_cb + 5)
 Read10_SCSI_CDB_Transfer_Len_1	EQU	(CBW_cb + 7)
 Read10_SCSI_CDB_Transfer_Len_0	EQU	(CBW_cb + 8)
 ;*****************************************************************************
-
-
 
 ;*****************************************************************************
 ;; SCSI Command Status Wrapper (to send to host)
@@ -1155,7 +1360,8 @@ SCSI_inquiry_response:
 align 2
 
 send_buffer			dup 512
-receive_buffer			dup 512 ; This comes last, in case of overrun.
+receive_buffer			dup 512
+;; disk_buffer			dup 512
 ;*****************************************************************************
 
 include descriptor.inc
