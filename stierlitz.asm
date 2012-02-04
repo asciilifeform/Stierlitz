@@ -361,10 +361,6 @@ bulk_send:
     int    POPALL_INT
 
     call   usb_send_data	; transmit answer
-
-    ;; push   r0
-    ;; call   send_zlp_ep_in 	; send short packet (ACK)
-    ;; pop    r0
     
     mov    r0, w[usbsend_len]	; bytes failed (0 if all were sent.)
     ret
@@ -545,9 +541,6 @@ do_rx_state_data_out:
     ret
 do_rx_state_data_in:
 do_rx_state_CSW:
-    mov	   r0, 0x0023		; #
-    call   dbg_putchar
-
     ;; iChunk = USBHwEPRead(bEP, NULL, 0); (for debug only?)
     ;; phrase error:
     ;; mov    b[scsi_state], SCSI_state_CBW
@@ -741,7 +734,6 @@ handle_data_in:
     call   print_hex_byte
     call   print_newline
 
-
     call   print_newline
     mov	   r0, 0x0054		; T
     call   dbg_putchar
@@ -791,10 +783,8 @@ data_in_send_csw:
 data_in_done:
     ret
 data_in_stall:
-
-    mov	   r0, 0x0024		; $
-    call   dbg_putchar
-
+    ;; mov	   r0, 0x0024		; $
+    ;; call   dbg_putchar
     call   stall_transfer
     jmp    data_in_send_csw
 ;*****************************************************************************
@@ -829,10 +819,8 @@ stall_bulk_in_ep: ; Select endpoint 1 (IN) control register
     mov    r9, DEV2_EP1_CTL_REG
 set_stall_bit: ; Stall the endpoint:
     or     [r9], STALL_EN
-
-    mov	   r0, 0x0053		; S
-    call   dbg_putchar
-
+    ;; mov	   r0, 0x0053		; S
+    ;; call   dbg_putchar
     ret
 ;; ---------------------------------------------------------------------------
 ;; Do we need to clear the stall bit later?
@@ -856,7 +844,6 @@ send_csw:
     and    r0, 0xFF
     mov    b[CSW_status], r0
 
-    ;; debug
     int    PUSHALL_INT
     call   print_newline
     mov	   r0, 0x0074		; t
@@ -868,7 +855,6 @@ send_csw:
     call   print_hex_byte
     call   print_newline
     int    POPALL_INT
-    ;; debug    
     
     mov    w[MSC_CSW_Signature_lw], CSW_Signature_lw_expected ; signature lower word
     mov    w[MSC_CSW_Signature_uw], CSW_Signature_uw_expected ; signature upper word
@@ -918,7 +904,6 @@ send_csw:
     call   print_hex_byte
     call   print_newline
     int    POPALL_INT
-
     
     ret
 ;*****************************************************************************
@@ -1059,8 +1044,7 @@ SCSI_command_read_10:
 SCSI_command_write_6:
     jmp    scsi_cmd_not_implemented ;;;;;; NOT IMPLEMENTED YET ;;;;;;
     ret
-SCSI_command_write_10:
-    jmp    scsi_cmd_not_implemented ;;;;;; NOT IMPLEMENTED YET ;;;;;;
+SCSI_command_write_10: ;; write returns nothing, AFAIK...
     ret
 SCSI_command_verify_10:
     jmp    scsi_cmd_not_implemented ;;;;;; NOT IMPLEMENTED YET ;;;;;;
@@ -1193,21 +1177,28 @@ SCSI_data_cmd_read_6:
     jmp    scsi_data_cmd_not_implemented  ;;;;;; NOT IMPLEMENTED YET ;;;;;;
     ret
 SCSI_data_cmd_read_10:
-    ;; TODO: Calculate LBA
     ;; Calculate current offset into buffer:
-    ;; dwBufPos = (dwOffset & (BLOCKSIZE - 1))
-
-    ;; if (dwBufPos == 0) then read new block:
+    mov    r0, w[dwOffset_lw]
+    and    r0, 0x01FF ;; dwBufPos = (dwOffset & (BLOCKSIZE - 1))
+    jnz    @f
+    call   load_lba_block ;; if (dwBufPos == 0) then read new block:
+@@: ; no new block
     ;; ...
-
-
-    ;; jmp    scsi_data_cmd_not_implemented  ;;;;;; NOT IMPLEMENTED YET ;;;;;;
+    ;; ...
     ret
 SCSI_data_cmd_write_6:
     jmp    scsi_data_cmd_not_implemented  ;;;;;; NOT IMPLEMENTED YET ;;;;;;
     ret
 SCSI_data_cmd_write_10:
-    jmp    scsi_data_cmd_not_implemented  ;;;;;; NOT IMPLEMENTED YET ;;;;;;
+    ;; This is wrong:
+    
+    ;; mov    r0, w[dwOffset_lw]
+    ;; and    r0, 0x01FF
+    ;; jnz    @f
+    ;; call   save_lba_block ;; if (dwBufPos == 0) then write new block:
+
+    ;; Because we want to write a *finished* block once it finishes.
+    ;; Unlike the READ-10.
     ret
 SCSI_data_cmd_verify_10:
     ;; nothing happens
@@ -1216,6 +1207,67 @@ SCSI_data_cmd_report_luns:
     jmp    scsi_data_cmd_not_implemented  ;;;;;; NOT IMPLEMENTED YET ;;;;;;
     ret
 ;*****************************************************************************
+
+;*****************************************************************************
+;; Load LBA block
+;*****************************************************************************
+load_lba_block:
+    ;; debug only right now:
+    int    PUSHALL_INT
+    call   print_newline
+    mov	   r0, 0x004C		; L
+    call   dbg_putchar
+    mov	   r0, 0x0052		; R
+    call   dbg_putchar   
+    mov	   r0, 0x003D		; =
+    call   dbg_putchar
+    mov    r1, w[Read10_SCSI_CDB_LBA_3]
+    and    r1, 0xFF
+    call   print_hex_byte
+    mov    r1, w[Read10_SCSI_CDB_LBA_2]
+    and    r1, 0xFF
+    call   print_hex_byte
+    mov    r1, w[Read10_SCSI_CDB_LBA_1]
+    and    r1, 0xFF
+    call   print_hex_byte
+    mov    r1, w[Read10_SCSI_CDB_LBA_0]
+    and    r1, 0xFF
+    call   print_hex_byte
+    call   print_newline
+    int    POPALL_INT
+    ret
+;*****************************************************************************
+
+;*****************************************************************************
+;; Save LBA block
+;*****************************************************************************
+save_lba_block:
+    ;; debug only right now:
+    int    PUSHALL_INT
+    call   print_newline
+    mov	   r0, 0x004C		; L
+    call   dbg_putchar
+    mov	   r0, 0x0057		; W
+    call   dbg_putchar   
+    mov	   r0, 0x003D		; =
+    call   dbg_putchar
+    mov    r1, w[Write10_SCSI_CDB_LBA_3]
+    and    r1, 0xFF
+    call   print_hex_byte
+    mov    r1, w[Write10_SCSI_CDB_LBA_2]
+    and    r1, 0xFF
+    call   print_hex_byte
+    mov    r1, w[Write10_SCSI_CDB_LBA_1]
+    and    r1, 0xFF
+    call   print_hex_byte
+    mov    r1, w[Write10_SCSI_CDB_LBA_0]
+    and    r1, 0xFF
+    call   print_hex_byte
+    call   print_newline
+    int    POPALL_INT
+    ret
+;*****************************************************************************
+
 
 ;*****************************************************************************
 ; mem_move
@@ -1322,6 +1374,18 @@ Read10_SCSI_CDB_Transfer_Len_0	EQU	(CBW_cb + 8)
 ;*****************************************************************************
 
 ;*****************************************************************************
+;; 'Write-10' SCSI Command
+;*****************************************************************************
+Write10_SCSI_CDB_LUN_etc	EQU	(CBW_cb + 1)
+Write10_SCSI_CDB_LBA_3		EQU	(CBW_cb + 2)
+Write10_SCSI_CDB_LBA_2		EQU	(CBW_cb + 3)
+Write10_SCSI_CDB_LBA_1		EQU	(CBW_cb + 4)
+Write10_SCSI_CDB_LBA_0		EQU	(CBW_cb + 5)
+Write10_SCSI_CDB_Transfer_Len_1	EQU	(CBW_cb + 7)
+Write10_SCSI_CDB_Transfer_Len_0	EQU	(CBW_cb + 8)
+;*****************************************************************************
+
+;*****************************************************************************
 ;; SCSI Command Status Wrapper (to send to host)
 ;*****************************************************************************
 CSW_Size			EQU	13
@@ -1355,16 +1419,15 @@ SCSI_inquiry_response:
 
 ;*****************************************************************************
 
+include descriptor.inc
+
 ;*****************************************************************************
 ;; Buffers
 align 2
 
 send_buffer			dup 512
 receive_buffer			dup 512
-;; disk_buffer			dup 512
 ;*****************************************************************************
-
-include descriptor.inc
 
 ;*****************************************************************************
 rom_end:
