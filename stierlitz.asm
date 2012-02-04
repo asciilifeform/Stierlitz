@@ -248,7 +248,7 @@ my_configuration_change:
     mov	   r0, [req_wvalue]
     and    r0, 0xFF
     cmp    r0, 1 ; [bConfigurationValue]
-    jne    @f			; it isn't time yet
+    jne    @f ; it isn't time yet
 
     cmp    b[conf_count], 4
     jb     @f
@@ -285,22 +285,22 @@ align 2
 ;*****************************************************************************
 ; Transmit zero-length packet.
 ;*****************************************************************************
-EP_DIR_IN		EQU	0x04
-EP_ARM			EQU	0x01
-EP_DATA1		EQU	0x40
-EP_ENB			EQU	0x02
-o_cnt			EQU	0x04
-;*****************************************************************************
-send_zlp_ep_in:
-    mov    r9, DEV2_EP1_CTL_REG
-    jmp    send_zlp
-send_zlp_ep_out:
-    mov    r9, DEV2_EP2_CTL_REG
-send_zlp:
-    xor    [r9], EP_DIR_IN	; change dir to IN
-    mov    [r9 + o_cnt], 0	; send zero-length packet
-    or     [r9], (EP_ARM|EP_DATA1|EP_ENB) ; status must be on DATA1
-    ret
+;; EP_DIR_IN		EQU	0x04
+;; EP_ARM			EQU	0x01
+;; EP_DATA1		EQU	0x40
+;; EP_ENB			EQU	0x02
+;; o_cnt			EQU	0x04
+;; ;*****************************************************************************
+;; send_zlp_ep_in:
+;;     mov    r9, DEV2_EP1_CTL_REG
+;;     jmp    send_zlp
+;; send_zlp_ep_out:
+;;     mov    r9, DEV2_EP2_CTL_REG
+;; send_zlp:
+;;     xor    [r9], EP_DIR_IN	; change dir to IN
+;;     mov    [r9 + o_cnt], 0	; send zero-length packet
+;;     or     [r9], (EP_ARM|EP_DATA1|EP_ENB) ; status must be on DATA1
+;;     ret
 ;*****************************************************************************
 
 
@@ -392,7 +392,6 @@ usb_receive_data:
     ret
 receiver_done:
     mov    b[rx_spin_lock], 0
-    ;; call   send_zlp_ep_out 	; send short packet (ACK)
     mov    r0, w[usbrecv_len]	; bytes failed (0 if all were received.)
     ret
 ;*****************************************************************************
@@ -783,8 +782,6 @@ data_in_send_csw:
 data_in_done:
     ret
 data_in_stall:
-    ;; mov	   r0, 0x0024		; $
-    ;; call   dbg_putchar
     call   stall_transfer
     jmp    data_in_send_csw
 ;*****************************************************************************
@@ -822,18 +819,6 @@ set_stall_bit: ; Stall the endpoint:
     ;; mov	   r0, 0x0053		; S
     ;; call   dbg_putchar
     ret
-;; ---------------------------------------------------------------------------
-;; Do we need to clear the stall bit later?
-;; CY7C67300 data sheet sayeth:
-;; ---------------------------------------------------------------------------
-;; Stall Enable (Bit 5)
-;; The Stall Enable bit sends a Stall in response to the next request
-;; (unless it is a setup request, which are always ACKed). This is a
-;; sticky bit and continues to respond with Stalls until cleared by
-;; firmware.
-;; 1: Send Stall
-;; 0: Do not send Stall
-;; ---------------------------------------------------------------------------
 ;*****************************************************************************
 
 ;*****************************************************************************
@@ -934,7 +919,6 @@ SCSI_handle_cmd:
     mov    w[response_length_uw], 0x0000 ; default - no data
     mov    b[cmd_must_stall_flag], 0x00	 ; default - no stall
     mov    b[dev_in_flag], 0x01	; default direction is device -> host
-    ;; bGroupCode = (pCDB->bOperationCode >> 5) & 0x7;
     xor    r0, r0
     mov    r0, b[Common_SCSI_CDB_op_code]
     clc
@@ -946,7 +930,6 @@ SCSI_handle_cmd:
     mov    r1, b[r11]                  ; aiCDBLen[bGroupCode]
     cmp    b[CBW_cb_length], r1	       ; if (CDBLen < aiCDBLen[bGroupCode])
     jb     bad_scsi_cmd		       ; return NULL (bad cmd)
-    ;; switch(pCDB->bOperationCode)
     xor    r0, r0
     mov    r0, b[Common_SCSI_CDB_op_code]
     cmp    r0, SCSI_CMD_TEST_UNIT_READY
@@ -1062,7 +1045,6 @@ align 2
 ;*****************************************************************************
 SCSI_handle_data:
     mov    b[dat_must_stall_flag], 0x00
-    ;; switch(pCDB->bOperationCode)
     xor    r0, r0
     mov    r0, b[Common_SCSI_CDB_op_code]
     cmp    r0, SCSI_CMD_TEST_UNIT_READY
@@ -1142,7 +1124,6 @@ SCSI_data_cmd_request_sense:
 SCSI_data_cmd_format_unit: ;; nothing happens
     ret
 SCSI_data_cmd_inquiry:
-    ;; memcpy(pbData, abInquiry, sizeof(abInquiry))
     mov    r9, send_buffer
     mov    r8, SCSI_inquiry_response
     xor    r1, r1
@@ -1200,8 +1181,7 @@ SCSI_data_cmd_write_10:
     ;; Because we want to write a *finished* block once it finishes.
     ;; Unlike the READ-10.
     ret
-SCSI_data_cmd_verify_10:
-    ;; nothing happens
+SCSI_data_cmd_verify_10: ;; nothing happens
     ret
 SCSI_data_cmd_report_luns:
     jmp    scsi_data_cmd_not_implemented  ;;;;;; NOT IMPLEMENTED YET ;;;;;;
@@ -1268,7 +1248,6 @@ save_lba_block:
     ret
 ;*****************************************************************************
 
-
 ;*****************************************************************************
 ; mem_move
 ; r9 = dest, r8 = src, r1 = word count
@@ -1280,7 +1259,6 @@ mem_move:
     jnz    @b
     ret
 ;*****************************************************************************
-
 
 ;*****************************************************************************
 ; subtract (16-bit)
