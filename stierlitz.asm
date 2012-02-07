@@ -1185,6 +1185,9 @@ SCSI_data_cmd_report_luns:
 ;*****************************************************************************
 ;; Load LBA block
 ;*****************************************************************************
+;; blocks_offset_lw		dw 0x0000
+;; blocks_offset_uw		dw 0x0000
+;*****************************************************************************
 load_lba_block:
     ;; debug only right now:
     int    PUSHALL_INT
@@ -1213,23 +1216,79 @@ load_lba_block:
 
     ;; find out if offset extends one or more block forward:
 
-    ;; mov    r1, w[dwOffset_uw]
-    mov    r0, w[dwOffset_lw]
-    shr    r0, 8
+    mov    r1, w[dwOffset_uw]
+    shl    r1, 8
+    and    r1, 0xFF00
+    mov    r0, r1
+    ;; upper byte of r0 == lower byte of uw
+    mov    r1, w[dwOffset_lw]
+    clc
+    shr    r1, 8
+    and    r1, 0x00FF
+    or     r0, r1
+    ;; r0 == {low{uw}, high{lw}}
+    xor    r4, r4
+    mov    r1, w[dwOffset_uw]
+    clc
+    shr    r1, 8
+    test   r1, 1
+    jz     @f
+    addi   r4, 1 ; bit 0 of uw
+@@:
     clc
     shr    r0, 1
-    ;; now block offset: r0 == dwOffset_lw / 512
-    
+    and    r4, r4
     jz     @f
-    ;; need to correct for offset:
-    mov    r1, b[Read10_SCSI_CDB_LBA_1]
-    shl    r1, 8
-    mov    r1, b[Read10_SCSI_CDB_LBA_0]
-    add    r1, r0
+    or     r0, 0x0080 ; set bit 7 of result to equal low bit of uw
+@@:
+    clc
+    shr    r1, 1
+    ;; now {r1:r0} = {dwOffset_uw:dwOffset_lw} / 512
+    ;; mov    w[blocks_offset_lw], r0
+    ;; mov    w[blocks_offset_uw], r1
 
-    mov    b[Read10_SCSI_CDB_LBA_0], r1
-    shr    r1, 8
-    mov    b[Read10_SCSI_CDB_LBA_1], r1
+    ;; skip block correction if correction factor is zero:
+    and    r0, r0
+    jnz    @f
+    and    r1, r1
+    jnz    @f
+    jmp    no_block_correction
+@@:
+    ;; need to correct for offset:
+    ;; load original LBA:
+    mov    r4, b[Read10_SCSI_CDB_LBA_3]
+    shl    r4, 8
+    and    r4, 0x00FF
+    mov    r4, b[Read10_SCSI_CDB_LBA_2]
+    ;; r4 = old lba high word
+    mov    r3, b[Read10_SCSI_CDB_LBA_1]
+    shl    r3, 8
+    and    r3, 0x00FF
+    mov    r3, b[Read10_SCSI_CDB_LBA_0]
+    ;; r3 = old lba low word
+    ;; add correction factor:
+    clc
+    add    r3, r0 ; add lw of corrector to low word of LBA
+    addc   r4, 0  ; add possible carry to high word of LBA
+    ;; write low word of corrected LBA back:
+    mov    r5, r3
+    and    r5, 0x00FF
+    mov    b[Read10_SCSI_CDB_LBA_0], r5
+    mov    r5, r3
+    clc
+    shr    r5, 8
+    and    r5, 0x00FF
+    mov    b[Read10_SCSI_CDB_LBA_1], r5
+    ;; write high word of corrected LBA back:
+    mov    r5, r4
+    and    r5, 0x00FF
+    mov    b[Read10_SCSI_CDB_LBA_2], r5
+    mov    r5, r4
+    clc
+    shr    r5, 8
+    and    r5, 0x00FF
+    mov    b[Read10_SCSI_CDB_LBA_3], r5
+    ;; correction done.
 
     ;; print corrected:
     int    PUSHALL_INT
@@ -1255,7 +1314,7 @@ load_lba_block:
     call   print_newline
     int    POPALL_INT
     
-@@:
+no_block_correction:
     ;; no need to correct for offset:
 
     
