@@ -49,6 +49,7 @@ EP_OUT	equ	0x02 ; 0x02 (ep2)
 
 include debug.inc ;; RS-232 Debugger
 
+
 ;; TODO: enable watchdog timer?
 
 ;*****************************************************************************
@@ -308,11 +309,14 @@ align 2
 ; Transmit usbsend_len bytes to endpoint send_endpoint from send_buffer.
 ;*****************************************************************************
 tx_spin_lock			db 0x00
+send_buffer_offset		dw 0x0000
 align 2
 ;*****************************************************************************
 usb_send_data:
     mov    w[usbsend_link], 0	; must be 0x0000 for send routine
     mov    w[usbsend_addr], send_buffer
+    mov    r0, w[send_buffer_offset]
+    add    w[usbsend_addr], r0
     mov    w[usbsend_call], usb_send_done ;; set up callback
     mov    b[tx_spin_lock], 1
     mov    r8, usbsend_link	; pointer to linker
@@ -581,6 +585,7 @@ do_tx_state_data_in:
     ret
 do_tx_state_CSW:
     mov	   w[usbsend_len], CSW_Size
+    mov    w[send_buffer_offset], 0x0000
     call   bulk_send  ;; send the CSW:
     mov    b[scsi_state], SCSI_state_CBW
     ret
@@ -697,6 +702,11 @@ handle_data_in:
 
     mov    r0, w[iChunk] ; number of bytes to transmit to bulk_in_ep
     mov	   w[usbsend_len], r0
+
+    mov    r0, w[dwOffset_lw]
+    and    r0, 0x01FF ;; dwBufPos = (dwOffset & (BLOCKSIZE - 1))
+    mov    w[send_buffer_offset], r0
+    
     call   bulk_send	; transmit bytes to host
     mov    r0, w[iChunk]
     add    w[dwOffset_lw], r0    ; dwOffset += iChunk
@@ -996,9 +1006,9 @@ SCSI_command_inquiry:
 @@:
     ret
 SCSI_command_mode_sense_6:
-    jmp    scsi_cmd_not_implemented ;;;;;; NOT IMPLEMENTED YET ;;;;;;
-    ;; mov    w[response_length_uw], 0x0000
-    ;; mov    w[response_length_lw], 8
+    ;; jmp    scsi_cmd_not_implemented ;;;;;; NOT IMPLEMENTED YET ;;;;;;
+    mov    w[response_length_uw], 0x0000
+    mov    w[response_length_lw], 0xC0
     ret
 SCSI_command_p_or_a_medium_rmvl:
     ret
@@ -1131,21 +1141,22 @@ SCSI_data_cmd_inquiry:
     call   mem_move
     ret
 SCSI_data_cmd_mode_sense_6:
-    ;; mov    b[(send_buffer)], 0x03 ; Number of bytes which follow
-    ;; mov    b[(send_buffer + 1)], 0x00 ; Medium Type: 00h for SBC devices.
-    ;; mov    b[(send_buffer + 2)], 0x00 ; Device-Specific Parameter - no WP, no cache
-    ;; mov    b[(send_buffer + 3)], 0x00 ; No mode-parameter block descriptors.
-    ;; mov    b[(send_buffer + 4)], 0x00 ; No blocks
-    ;; mov    b[(send_buffer + 5)], 0x00 ; No blocks
-    ;; mov    b[(send_buffer + 6)], 0x00 ; No blocks
-    ;; mov    b[(send_buffer + 7)], 0x00 ; No blocks
+    call   zap_send_buffer
+    mov    b[(send_buffer)], 0x03 ; Number of bytes which follow
+    mov    b[(send_buffer + 1)], 0x00 ; Medium Type: 00h for SBC devices.
+    mov    b[(send_buffer + 2)], 0x00 ; Device-Specific Parameter - no WP, no cache
+    mov    b[(send_buffer + 3)], 0x00 ; No mode-parameter block descriptors.
+    mov    b[(send_buffer + 4)], 0x00 ; No blocks
+    mov    b[(send_buffer + 5)], 0x00 ; No blocks
+    mov    b[(send_buffer + 6)], 0x00 ; No blocks
+    mov    b[(send_buffer + 7)], 0x00 ; No blocks
     ret
 SCSI_data_cmd_p_or_a_medium_rmvl: ;; nothing happens
     ret
 SCSI_data_cmd_read_capacity:
     ;; maximal block:
     mov    b[(send_buffer)], 0x00 ;; ((MAXBLOCK >> 24) && 0xFF)
-    mov    b[(send_buffer + 1)], 0x80 ;; ((MAXBLOCK >> 16) && 0xFF)
+    mov    b[(send_buffer + 1)], 0x20 ;; ((MAXBLOCK >> 16) && 0xFF)
     mov    b[(send_buffer + 2)], 0x00 ;; ((MAXBLOCK >> 8) && 0xFF)
     mov    b[(send_buffer + 3)], 0x00 ;; ((MAXBLOCK >> 0) && 0xFF)
     ;; block size:
@@ -1159,11 +1170,11 @@ SCSI_data_cmd_read_6:
     ret
 SCSI_data_cmd_read_10:
     ;; Calculate current offset into buffer:
-    mov    r0, w[dwOffset_lw]
-    and    r0, 0x01FF ;; dwBufPos = (dwOffset & (BLOCKSIZE - 1))
-    jnz    @f
+    ;; mov    r0, w[dwOffset_lw]
+    ;; and    r0, 0x01FF ;; dwBufPos = (dwOffset & (BLOCKSIZE - 1))
+    ;; jnz    @f
     call   load_lba_block ;; if (dwBufPos == 0) then read new block:
-@@: ; no new block
+;; @@: ; no new block
     ;; ...
     ;; ...
     ret
@@ -1201,20 +1212,96 @@ load_lba_block:
     call   dbg_putchar   
     mov	   r0, 0x003D		; =
     call   dbg_putchar
-    mov    r1, w[Read10_SCSI_CDB_LBA_3]
+    mov    r1, b[Read10_SCSI_CDB_LBA_3]
     and    r1, 0xFF
     call   print_hex_byte
-    mov    r1, w[Read10_SCSI_CDB_LBA_2]
+    mov    r1, b[Read10_SCSI_CDB_LBA_2]
     and    r1, 0xFF
     call   print_hex_byte
-    mov    r1, w[Read10_SCSI_CDB_LBA_1]
+    mov    r1, b[Read10_SCSI_CDB_LBA_1]
     and    r1, 0xFF
     call   print_hex_byte
-    mov    r1, w[Read10_SCSI_CDB_LBA_0]
+    mov    r1, b[Read10_SCSI_CDB_LBA_0]
     and    r1, 0xFF
     call   print_hex_byte
     call   print_newline
     int    POPALL_INT
+
+
+    ;; find out if offset extends one or more block forward:
+
+    ;; mov    r1, w[dwOffset_uw]
+    mov    r0, w[dwOffset_lw]
+    shr    r0, 8
+    clc
+    shr    r0, 1
+    ;; now block offset: r0 == dwOffset_lw / 512
+    
+    jnz    @f
+    ;; need to correct for offset:
+    mov    r1, b[Read10_SCSI_CDB_LBA_1]
+    shl    r1, 8
+    mov    r1, b[Read10_SCSI_CDB_LBA_0]
+    add    r1, r0
+
+    mov    b[Read10_SCSI_CDB_LBA_0], r1
+    shr    r1, 8
+    mov    b[Read10_SCSI_CDB_LBA_1], r1
+    
+@@:
+    ;; no need to correct for offset:
+
+    
+    ;; We have blocks: 0, 10, 63, 64, 192, 320
+
+    ;; 320 == 0x0140
+    
+    ;; Upper two LBA address bytes must be zero
+    cmp	   b[Read10_SCSI_CDB_LBA_3], 0x00
+    jne    zero_block
+    cmp	   b[Read10_SCSI_CDB_LBA_2], 0x00
+    jne    zero_block
+
+    cmp	   b[Read10_SCSI_CDB_LBA_1], 0x00
+    je     @f
+    cmp	   b[Read10_SCSI_CDB_LBA_1], 0x01
+    jne    @f
+    cmp	   b[Read10_SCSI_CDB_LBA_0], 0x40
+    jne    zero_block
+    ;; block 321;
+    mov    r8, block_320
+    jmp    load_block
+@@:
+    cmp	   b[Read10_SCSI_CDB_LBA_0], 0
+    jne    @f
+    mov    r8, block_0
+    jmp    load_block
+@@:
+    cmp	   b[Read10_SCSI_CDB_LBA_0], 10
+    jne    @f
+    mov    r8, block_10
+    jmp    load_block
+@@:
+    cmp	   b[Read10_SCSI_CDB_LBA_0], 63
+    jne    @f
+    mov    r8, block_63
+    jmp    load_block
+@@:
+    cmp	   b[Read10_SCSI_CDB_LBA_0], 64
+    jne    @f
+    mov    r8, block_64
+    jmp    load_block
+@@:
+    cmp	   b[Read10_SCSI_CDB_LBA_0], 192
+    jne    zero_block
+    mov    r8, block_192
+load_block:
+    mov    r9, send_buffer
+    mov    r1, 0x0100 		; 256 words
+    call   mem_move 		; r9 = dest, r8 = src, r1 = word count
+    ret
+zero_block:
+    call   zap_send_buffer
     ret
 ;*****************************************************************************
 
@@ -1231,20 +1318,34 @@ save_lba_block:
     call   dbg_putchar   
     mov	   r0, 0x003D		; =
     call   dbg_putchar
-    mov    r1, w[Write10_SCSI_CDB_LBA_3]
+    mov    r1, b[Write10_SCSI_CDB_LBA_3]
     and    r1, 0xFF
     call   print_hex_byte
-    mov    r1, w[Write10_SCSI_CDB_LBA_2]
+    mov    r1, b[Write10_SCSI_CDB_LBA_2]
     and    r1, 0xFF
     call   print_hex_byte
-    mov    r1, w[Write10_SCSI_CDB_LBA_1]
+    mov    r1, b[Write10_SCSI_CDB_LBA_1]
     and    r1, 0xFF
     call   print_hex_byte
-    mov    r1, w[Write10_SCSI_CDB_LBA_0]
+    mov    r1, b[Write10_SCSI_CDB_LBA_0]
     and    r1, 0xFF
     call   print_hex_byte
     call   print_newline
     int    POPALL_INT
+    ret
+;*****************************************************************************
+
+;*****************************************************************************
+; zap send buffer
+; r9 = dest, r8 = src, r1 = word count
+;*****************************************************************************
+zap_send_buffer:
+    mov    r1, 0x0200
+    mov    r9, send_buffer
+@@:
+    mov    b[r9++], 0x00
+    dec    r1
+    jnz    @b
     ret
 ;*****************************************************************************
 
@@ -1398,6 +1499,8 @@ SCSI_inquiry_response:
 ;*****************************************************************************
 
 include descriptor.inc
+
+include clean1gb.inc
 
 ;*****************************************************************************
 ;; Buffers
