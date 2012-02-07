@@ -1170,11 +1170,11 @@ SCSI_data_cmd_read_6:
     ret
 SCSI_data_cmd_read_10:
     ;; Calculate current offset into buffer:
-    ;; mov    r0, w[dwOffset_lw]
-    ;; and    r0, 0x01FF ;; dwBufPos = (dwOffset & (BLOCKSIZE - 1))
-    ;; jnz    @f
+    mov    r0, w[dwOffset_lw]
+    and    r0, 0x01FF ;; dwBufPos = (dwOffset & (BLOCKSIZE - 1))
+    jnz    @f
     call   load_lba_block ;; if (dwBufPos == 0) then read new block:
-;; @@: ; no new block
+@@: ; not new block
     ;; ...
     ;; ...
     ret
@@ -1237,7 +1237,7 @@ load_lba_block:
     shr    r0, 1
     ;; now block offset: r0 == dwOffset_lw / 512
     
-    jnz    @f
+    jz     @f
     ;; need to correct for offset:
     mov    r1, b[Read10_SCSI_CDB_LBA_1]
     shl    r1, 8
@@ -1247,6 +1247,30 @@ load_lba_block:
     mov    b[Read10_SCSI_CDB_LBA_0], r1
     shr    r1, 8
     mov    b[Read10_SCSI_CDB_LBA_1], r1
+
+    ;; print corrected:
+    int    PUSHALL_INT
+    call   print_newline
+    mov	   r0, 0x005A		; Z
+    call   dbg_putchar
+    mov	   r0, 0x0052		; R
+    call   dbg_putchar   
+    mov	   r0, 0x003D		; =
+    call   dbg_putchar
+    mov    r1, b[Read10_SCSI_CDB_LBA_3]
+    and    r1, 0xFF
+    call   print_hex_byte
+    mov    r1, b[Read10_SCSI_CDB_LBA_2]
+    and    r1, 0xFF
+    call   print_hex_byte
+    mov    r1, b[Read10_SCSI_CDB_LBA_1]
+    and    r1, 0xFF
+    call   print_hex_byte
+    mov    r1, b[Read10_SCSI_CDB_LBA_0]
+    and    r1, 0xFF
+    call   print_hex_byte
+    call   print_newline
+    int    POPALL_INT
     
 @@:
     ;; no need to correct for offset:
@@ -1268,7 +1292,7 @@ load_lba_block:
     jne    @f
     cmp	   b[Read10_SCSI_CDB_LBA_0], 0x40
     jne    zero_block
-    ;; block 321;
+    ;; block 320;
     mov    r8, block_320
     jmp    load_block
 @@:
