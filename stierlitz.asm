@@ -282,29 +282,6 @@ dwOffset_uw			dw 0x0000
 
 align 2
 
-
-;*****************************************************************************
-; Transmit zero-length packet.
-;*****************************************************************************
-;; EP_DIR_IN		EQU	0x04
-;; EP_ARM			EQU	0x01
-;; EP_DATA1		EQU	0x40
-;; EP_ENB			EQU	0x02
-;; o_cnt			EQU	0x04
-;; ;*****************************************************************************
-;; send_zlp_ep_in:
-;;     mov    r9, DEV2_EP1_CTL_REG
-;;     jmp    send_zlp
-;; send_zlp_ep_out:
-;;     mov    r9, DEV2_EP2_CTL_REG
-;; send_zlp:
-;;     xor    [r9], EP_DIR_IN	; change dir to IN
-;;     mov    [r9 + o_cnt], 0	; send zero-length packet
-;;     or     [r9], (EP_ARM|EP_DATA1|EP_ENB) ; status must be on DATA1
-;;     ret
-;*****************************************************************************
-
-
 ;*****************************************************************************
 ; Transmit usbsend_len bytes to endpoint send_endpoint from send_buffer.
 ;*****************************************************************************
@@ -677,8 +654,14 @@ handle_data_in:
     call   subtract_16
     cmp    r1, 0
     jne    @f	  ; if upper word of subtraction result is nonzero, then definitely > 64
-    cmp    r0, 64
-    jg     @f	  ; if lower word is greater than 64, then keep iChunk == 64.
+
+    ;; cmp    r0, 64
+    ;; jg     @f	  ; if lower word is greater than 64, then keep iChunk == 64.
+
+    mov    r4, r0
+    and    r4, 0xFFC0
+    jnz    @f	  ; if lower word is greater than 64, then keep iChunk == 64.
+    
     mov    w[iChunk], r0 ; otherwise, iChunk <- r0 (dwTransferSize - dwOffset).
 @@:
 
@@ -703,7 +686,7 @@ handle_data_in:
     mov    r0, w[iChunk] ; number of bytes to transmit to bulk_in_ep
     mov	   w[usbsend_len], r0
 
-    mov    r0, w[dwOffset_lw]
+    mov    r0, w[dwOffset_lw]	; MOOOOOOOOOO
     and    r0, 0x01FF ;; dwBufPos = (dwOffset & (BLOCKSIZE - 1))
     mov    w[send_buffer_offset], r0
     
@@ -764,11 +747,11 @@ handle_data_in:
     call   dbg_putchar
     mov	   r0, 0x003D		; =
     call   dbg_putchar
-    mov    r1, w[CBW_data_transfer_length_lw]
+    mov    r1, w[CBW_data_transfer_length_uw]
     shr    r1, 8
     and    r1, 0xFF
     call   print_hex_byte
-    mov    r1, w[CBW_data_transfer_length_lw]
+    mov    r1, w[CBW_data_transfer_length_uw]
     and    r1, 0xFF
     call   print_hex_byte
     call   print_newline
@@ -1339,7 +1322,7 @@ save_lba_block:
     mov	   r0, 0x004C		; L
     call   dbg_putchar
     mov	   r0, 0x0057		; W
-    call   dbg_putchar   
+    call   dbg_putchar
     mov	   r0, 0x003D		; =
     call   dbg_putchar
     mov    r1, b[Write10_SCSI_CDB_LBA_3]
