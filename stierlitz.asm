@@ -55,11 +55,6 @@ include debug.inc ;; RS-232 Debugger
 init_code:
     call   dbg_enable ; Enable RS-232 Debug Port.
 
-    ;; init:
-    mov    r1, 0		; full speed
-    mov    r2, 2		; SIE2
-    int    SUSB_INIT_INT
-    
     ; Update BIOS SIE2 descriptor pointers.
     mov    [SUSB2_DEV_DESC_VEC], dev_desc
     mov    [SUSB2_CONFIG_DESC_VEC], conf_desc
@@ -76,6 +71,11 @@ init_code:
     call   print_newline
     mov	   r0, 0x002A		; *
     call   dbg_putchar
+
+    ;; init:
+    xor    r1, r1		; full speed
+    mov    r2, 2		; SIE2
+    int    SUSB_INIT_INT
     
     mov    b[main_enable], 0x00 ; we want to enable self when configured
     mov    [(IDLER_INT*2)], aux_idler
@@ -265,6 +265,7 @@ usb_send_data:
     add    w[usbsend_addr], r0
     mov    w[usbsend_call], usb_send_done ;; set up callback
     mov    b[tx_spin_lock], 1
+usb_tx:
     mov    r8, usbsend_link	; pointer to linker
     xor    r1, r1
     mov    r1, EP_IN ; which endpoint to send to
@@ -273,9 +274,15 @@ usb_send_data:
     call   bios_idle
     cmp    b[tx_spin_lock], 0
     je     @b
+
+    mov    r0, w[usbsend_len]
+    cmp    r0, 0x0000
+    jne    usb_tx
+    mov    b[tx_spin_lock], 0
+
     ret
 usb_send_done: ;; Callback
-    mov   b[tx_spin_lock], 0
+    mov    b[tx_spin_lock], 0
     ret
 ;*****************************************************************************
 ;; Send data structure
@@ -294,15 +301,16 @@ usbsend_call			dw 0x0000
 bulk_send:
     call   usb_send_data	; transmit answer
 
-    mov    r0, 180
+    mov    r0, 150		; 150
     call   delay
-  
+
     mov    r0, w[usbsend_len]	; bytes failed (0 if all were sent.)
     ret
 ;*****************************************************************************
 
+
 ;*****************************************************************************
-; Receive r0 bytes of data from Bulk OUT endpoint into receive_buffer.
+; Receive usbrecv_length bytes of data from Bulk OUT endpoint into receive_buffer.
 ; r0 will equal number of bytes NOT received.
 ;*****************************************************************************
 rx_spin_lock			db 0x00
@@ -310,10 +318,11 @@ align 2
 ;*****************************************************************************
 usb_receive_data:
     mov    b[rx_spin_lock], 1
-    mov    w[usbrecv_len], r0	; how many bytes to receive
+
     mov    w[usbrecv_link], 0
     mov    w[usbrecv_addr], receive_buffer
     mov    w[usbrecv_call], receiver_done
+usb_rx:
     mov    r8, usbrecv_link	; pointer to linker
     mov    r1, EP_OUT           ; from which endpoint to receive
     and    r1, 0x0F
@@ -322,6 +331,11 @@ usb_receive_data:
     call   bios_idle
     cmp    b[rx_spin_lock], 0
     jne    @b
+
+    mov    r0, w[usbrecv_len]
+    cmp    r0, 0x0000
+    jne    usb_rx
+
     ret
 receiver_done:
     mov    b[rx_spin_lock], 0
@@ -366,8 +380,13 @@ scsi_rx_state_jmp_table:
     dw     do_rx_state_stalled
     ;; ------------------------
 do_rx_state_CBW:
-    mov    r0, CBW_Size
+    mov    w[usbrecv_len], CBW_Size	; how many bytes to receive
     call   usb_receive_data	; read CBW from host Bulk OUT endpoint
+
+    ;; push   r0
+    ;; call   dbg_dump_rx_buffer	; debug
+    ;; pop    r0
+    
     ;; Check for valid CBW:
     cmp    r0, 0		; how many bytes (of 31) failed to read?
     jne    invalid_cbw		; if any unread bytes, invalid.
@@ -375,7 +394,7 @@ do_rx_state_CBW:
     jne    invalid_cbw		; lower word of signature is invalid
     cmp    w[MSC_CBW_Signature_uw], CBW_Signature_uw_expected
     jne    invalid_cbw		; upper word of signature is invalid
-    mov    r0, [CBW_lun]
+    mov    r0, b[CBW_lun]
     and    r0, 0x0F
     cmp    r0, 0		; LUN == 0?
     jne    invalid_cbw		; if not, then CBW is 'not meaningful.'
@@ -397,11 +416,11 @@ valid_cbw:
     mov    w[dwTransferSize_lw], r0
     mov    w[dwTransferSize_uw], r0
     ;; fHostIN = ((CBW.bmCBWFlags & 0x80) != 0);
-    mov    [host_in_flag], 0x00
+    mov    b[host_in_flag], 0x00
     mov    r0, b[CBW_flags] ; Whether to stall IN endpoint:
     test   r0, 0x80         ; Bit 7 = 0 for an OUT (host-to-device) transfer.
     jz	   @f               ; Bit 7 = 1 for an IN (device-to-host) transfer.
-    mov    [host_in_flag], 0x01
+    mov    b[host_in_flag], 0x01
 @@:
     call   SCSI_handle_cmd  ; pbData = SCSIHandleCmd(CBW.CBWCB, CBW.bCBWCBLength, &iLen, &fDevIn);
     cmp    b[cmd_must_stall_flag], 0x01
@@ -419,8 +438,8 @@ valid_cbw:
     je     no_disagree
 yes_response:
     ;; if (response length > 0)
-    mov    r0, [host_in_flag]
-    xor    r0, [dev_in_flag]
+    mov    r0, b[host_in_flag]
+    xor    r0, b[dev_in_flag]
     jz     no_disagree
     ;; && ((fHostIn && !fDevIn) || (!fHostIn && fDevIn)) then:
     call   stall_transfer
@@ -535,6 +554,7 @@ handle_data_out:
     ;; if (dwOffset < dwTransferSize)
     ;; iChunk = USBHwEPRead(bulk_out_ep, pbData, dwTransferSize - dwOffset)
     ;; r0 already = dwTransferSize - dwOffset
+    mov    w[usbrecv_len], r0 ; how many bytes to receive
     call   usb_receive_data ; receive data from host
     call   SCSI_handle_data
     cmp    b[dat_must_stall_flag], 0x01
@@ -665,8 +685,8 @@ stall_bulk_in_ep: ; Select endpoint 1 (IN) control register
     mov    r9, DEV2_EP1_CTL_REG
 set_stall_bit: ; Stall the endpoint:
     or     [r9], STALL_EN
-    ;; mov	   r0, 0x0053		; S
-    ;; call   dbg_putchar
+    mov	   r0, 0x0053		; S
+    call   dbg_putchar
     ret
 ;*****************************************************************************
 
