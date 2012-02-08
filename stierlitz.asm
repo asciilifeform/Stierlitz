@@ -88,9 +88,7 @@ init_code:
 ;; Delay - call idle loop R0 times
 ;*****************************************************************************
 delay:
-    int    PUSHALL_INT
-    int    IDLE_INT
-    int    POPALL_INT
+    call   bios_idle
     subi   r0, 1
     jnz    delay
     ret
@@ -132,10 +130,10 @@ main_idler:
     jne    main_idler
     cmp    b[tx_spin_lock], 0
     jne    main_idler
-   
+
     call   usb_host_to_dev_handler ; handle any input from host
     call   usb_dev_to_host_handler ; handle any output to host
-
+    
     jmp    main_idler
 ;*****************************************************************************
 
@@ -249,7 +247,6 @@ dwTransferSize_uw		dw 0x0000
 dwOffset:			; Offset in current data transfer
 dwOffset_lw			dw 0x0000
 dwOffset_uw			dw 0x0000
-
 ;*****************************************************************************
 
 align 2
@@ -273,9 +270,7 @@ usb_send_data:
     mov    r1, EP_IN ; which endpoint to send to
     int    SUSB2_SEND_INT	; call interrupt
 @@:
-    int    PUSHALL_INT
-    int    IDLE_INT
-    int    POPALL_INT
+    call   bios_idle
     cmp    b[tx_spin_lock], 0
     je     @b
     ret
@@ -291,6 +286,7 @@ usbsend_len			dw 0x0000
 usbsend_call			dw 0x0000
 ;*****************************************************************************
 
+
 ;*****************************************************************************
 ; Transmit [usbsend_len] bytes from send_buffer to host via EP_IN.
 ; r0 will equal number of bytes which were NOT sent.
@@ -298,9 +294,9 @@ usbsend_call			dw 0x0000
 bulk_send:
     call   usb_send_data	; transmit answer
 
-    mov    r0, 200
+    mov    r0, 180
     call   delay
-    
+  
     mov    r0, w[usbsend_len]	; bytes failed (0 if all were sent.)
     ret
 ;*****************************************************************************
@@ -323,9 +319,7 @@ usb_receive_data:
     and    r1, 0x0F
     int    SUSB2_RECEIVE_INT	; call interrupt
 @@:
-    int    PUSHALL_INT
-    int    IDLE_INT
-    int    POPALL_INT
+    call   bios_idle
     cmp    b[rx_spin_lock], 0
     jne    @b
     ret
@@ -374,11 +368,6 @@ scsi_rx_state_jmp_table:
 do_rx_state_CBW:
     mov    r0, CBW_Size
     call   usb_receive_data	; read CBW from host Bulk OUT endpoint
-
-    ;; push   r0
-    ;; call   dbg_dump_rx_buffer	; debug
-    ;; pop    r0
-    
     ;; Check for valid CBW:
     cmp    r0, 0		; how many bytes (of 31) failed to read?
     jne    invalid_cbw		; if any unread bytes, invalid.
@@ -445,8 +434,6 @@ no_disagree:
     mov    r0, w[CBW_data_transfer_length_lw]
     mov    r1, w[CBW_data_transfer_length_uw] ; R1:R0 = dwCBWDataTransferLength
     ;; R1:R0 - R3:R2
-    ;; sub    r0, r2 ; Subtract the lower halves.  This may "borrow" from the upper half.
-    ;; subb   r1, r3 ; Subtract the upper halves.
     call   subtract_16
     jnc    @f	  ; If result < 0?
     ;; if (iLen > CBW.dwCBWDataTransferLength) then: negative residue
@@ -543,8 +530,6 @@ handle_data_out:
     mov    r2, w[dwOffset_lw]
     mov    r3, w[dwOffset_uw] ; R3:R2 = dwOffset
     ;; R1:R0 - R3:R2
-    ;; sub    r0, r2 ; Subtract the lower halves.  This may "borrow" from the upper half.
-    ;; subb   r1, r3 ; Subtract the upper halves.
     call   subtract_16
     jc     no_data_out ; if carry, then dwOffset > dwTransferSize
     ;; if (dwOffset < dwTransferSize)
@@ -607,8 +592,6 @@ handle_data_in:
     mov    r2, w[dwOffset_lw]
     mov    r3, w[dwOffset_uw] ; R3:R2 = dwOffset
     ;; R1:R0 - R3:R2
-    ;; sub    r0, r2 ; Subtract the lower halves.  This may "borrow" from the upper half.
-    ;; subb   r1, r3 ; Subtract the upper halves.
     call   subtract_16
     cmp    r1, 0
     jne    @f	  ; if upper word of subtraction result is nonzero, then definitely > 64
@@ -622,7 +605,7 @@ handle_data_in:
     mov    r0, w[iChunk] ; number of bytes to transmit to bulk_in_ep
     mov	   w[usbsend_len], r0
 
-    mov    r0, w[dwOffset_lw]	; MOOOOOOOOOO
+    mov    r0, w[dwOffset_lw] ; only need lower word of dwoffset to calculate offset into block
     and    r0, 0x01FF ;; dwBufPos = (dwOffset & (BLOCKSIZE - 1))
     mov    w[send_buffer_offset], r0
     
@@ -682,8 +665,8 @@ stall_bulk_in_ep: ; Select endpoint 1 (IN) control register
     mov    r9, DEV2_EP1_CTL_REG
 set_stall_bit: ; Stall the endpoint:
     or     [r9], STALL_EN
-    mov	   r0, 0x0053		; S
-    call   dbg_putchar
+    ;; mov	   r0, 0x0053		; S
+    ;; call   dbg_putchar
     ret
 ;*****************************************************************************
 
@@ -704,8 +687,6 @@ send_csw:
     mov    r0, w[CBW_data_transfer_length_lw]
     mov    r1, w[CBW_data_transfer_length_uw] ; R1:R0 = dwCBWDataTransferLength
     ;; R1:R0 - R3:R2
-    ;; sub    r0, r2 ; Subtract the lower halves.  This may "borrow" from the upper half.
-    ;; subb   r1, r3 ; Subtract the upper halves.
     call   subtract_16
     jnc    @f	  ; If result < 0?
     xor    r0, r0 ; then iResidue = 0.
@@ -989,8 +970,7 @@ SCSI_data_cmd_read_10:
     jnz    @f
     call   load_lba_block ;; if (dwBufPos == 0) then read new block:
 @@: ; not new block
-    ;; ...
-    ;; ...
+    ;; offset into block is calculated in handle_data_in
     ret
 SCSI_data_cmd_write_6:
     jmp    scsi_data_cmd_not_implemented  ;;;;;; NOT IMPLEMENTED YET ;;;;;;
@@ -1049,31 +1029,6 @@ load_lba_block:
     ;; and    r1, 0xFF
     ;; call   print_hex_byte
     ;; mov    r1, b[Read10_SCSI_CDB_LBA_0]
-    ;; and    r1, 0xFF
-    ;; call   print_hex_byte
-    ;; call   print_newline
-    ;; int    POPALL_INT
-
-    ;; int    PUSHALL_INT
-    ;; call   print_newline
-    ;; mov	   r0, 0x0051		; Q
-    ;; call   dbg_putchar
-    ;; mov	   r0, 0x0052		; R
-    ;; call   dbg_putchar   
-    ;; mov	   r0, 0x003D		; =
-    ;; call   dbg_putchar
-    ;; mov    r1, w[dwOffset_uw]
-    ;; shr    r1, 8
-    ;; and    r1, 0xFF
-    ;; call   print_hex_byte
-    ;; mov    r1, w[dwOffset_uw]
-    ;; and    r1, 0xFF
-    ;; call   print_hex_byte
-    ;; mov    r1, w[dwOffset_lw]
-    ;; shr    r1, 8
-    ;; and    r1, 0xFF
-    ;; call   print_hex_byte
-    ;; mov    r1, w[dwOffset_lw]
     ;; and    r1, 0xFF
     ;; call   print_hex_byte
     ;; call   print_newline
