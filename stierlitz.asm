@@ -1175,29 +1175,29 @@ load_lba_block:
     addc   r4, w[blocks_offset_uw] ; add possible carry to high word of LBA
 
     ;; write actual LBA to access:
-    mov    w[actual_lba_lw], r3
-    mov    w[actual_lba_uw], r4
+    ;; mov    w[actual_lba_lw], r3
+    ;; mov    w[actual_lba_uw], r4
     
     ;; write low word of corrected LBA back:
-    ;; mov    r5, r3
-    ;; and    r5, 0x00FF
-    ;; mov    b[Read10_SCSI_CDB_LBA_0], r5
+    mov    r5, r3
+    and    r5, 0x00FF
+    mov    b[ActualLBA_0], r5
 
-    ;; mov    r5, r3
-    ;; clc
-    ;; shr    r5, 8
-    ;; and    r5, 0x00FF
-    ;; mov    b[Read10_SCSI_CDB_LBA_1], r5
+    mov    r5, r3
+    clc
+    shr    r5, 8
+    and    r5, 0x00FF
+    mov    b[ActualLBA_1], r5
     
-    ;; ;; write high word of corrected LBA back:
-    ;; mov    r5, r4
-    ;; and    r5, 0x00FF
-    ;; mov    b[Read10_SCSI_CDB_LBA_3], r5
-    ;; mov    r5, r4
-    ;; clc
-    ;; shr    r5, 8
-    ;; and    r5, 0x00FF
-    ;; mov    b[Read10_SCSI_CDB_LBA_2], r5
+    ;; write high word of corrected LBA back:
+    mov    r5, r4
+    and    r5, 0x00FF
+    mov    b[ActualLBA_3], r5
+    mov    r5, r4
+    clc
+    shr    r5, 8
+    and    r5, 0x00FF
+    mov    b[ActualLBA_2], r5
     ;; correction done.
 
     ;; print corrected:
