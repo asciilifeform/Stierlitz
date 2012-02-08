@@ -8,9 +8,6 @@ VENDOR_ID   equ 0x08EC 		; "M-Systems Flash Disk"
 PRODUCT_ID  equ 0x0020		; "TravelDrive"
 
 
-TMR_INTERVAL equ 100
-
-
 ORIGIN equ 0x500
 
 .xlist
@@ -80,51 +77,10 @@ init_code:
     mov	   r0, 0x002A		; *
     call   dbg_putchar
     
-    ;; Init Timer:
-    mov	   [TMR1_IRQ_EN], main_timer ; New Timer1 ISR
-    or     [IRQ_EN_REG], 2	     ; enable timer1 interrupt
-
-    ;; Init Idler:
-    ;; mov    r0, main_idler ; r0 <- new idle task
-    ;; int    INSERT_IDLE_INT ; insert idle task
-    ;; mov    w[bios_idle_chain], r0 ; save link to bios idle chain
-    
+    mov    b[main_enable], 0x00 ; we want to enable self when configured
+    mov    [(IDLER_INT*2)], aux_idler
+   
     ret
-;*****************************************************************************
-
-
-;*****************************************************************************
-;; Main Idler - called periodically by the BIOS.
-;*****************************************************************************
-;; idle_lock			db 0x00
-;; align 2
-;; ;*****************************************************************************
-;; main_idler:
-;;     push   [CPU_FLAGS_REG]	; push flags register
-;;     int    PUSHALL_INT
-    
-;;     cmp    b[idle_lock], 0
-;;     jne    switched_off
-
-;;     mov    b[idle_lock], 0x01
-    
-;;     cmp    b[main_enable], 0 	; global enable toggled by delta_config
-;;     je     switched_off		; if disabled, skip MSC routines
-;;     cmp    b[rx_spin_lock], 0
-;;     jne    switched_off
-;;     cmp    b[tx_spin_lock], 0
-;;     jne    switched_off
-
-;;     mov	   r0, 0x002E		; .
-;;     call   dbg_putchar
-
-;;     call   usb_host_to_dev_handler ; handle any input from host
-;;     call   usb_dev_to_host_handler ; handle any output to host
-;; switched_off:
-;;     mov    b[idle_lock], 0x00
-;;     int    POPALL_INT
-;;     pop    [CPU_FLAGS_REG]	; restore flags register
-;;     jmp    [bios_idle_chain]
 ;*****************************************************************************
 
 
@@ -142,43 +98,47 @@ delay:
 
 
 ;*****************************************************************************
-;; Main Timer - called periodically by the BIOS.
+;; Main Loop
 ;*****************************************************************************
-main_enable			db 0x00
-main_lock			db 0x00
+aux_idler:
+    addi   r15, 2
+    cmp    b[main_lock], 0x00
+    jne    @f
+    mov    b[main_lock], 1
+    call   main_idler
+    mov    b[main_lock], 0
+@@:
+    int    IDLER_INT
 ;*****************************************************************************
-main_timer:
-    push   [CPU_FLAGS_REG]	; push flags register
+bios_idle:
     int    PUSHALL_INT
-    and    [IRQ_EN_REG], !2	; disable timer1 interrupt
-    sti
-
-    cmp    b[main_lock], 0
-    jne    main_disabled
-    
-    cmp    b[main_enable], 0 	; global enable toggled by delta_config
-    je     main_disabled	; if disabled, skip MSC routines
-
-    mov    b[main_lock], 0x01
-    
-    cmp    b[rx_spin_lock], 0
-    jne    main_disabled
-    cmp    b[tx_spin_lock], 0
-    jne    main_disabled
-
-  
-    call   usb_host_to_dev_handler ; handle any input from host
-    call   usb_dev_to_host_handler ; handle any output to host
-    
-    mov    b[main_lock], 0x00
-main_disabled:
-    mov    [TMR1_REG], TMR_INTERVAL	; reload timer 1
-    or     [IRQ_EN_REG], 2	; enable timer1 interrupt
+    int    IDLE_INT
     int    POPALL_INT
-    pop    [CPU_FLAGS_REG]	; restore flags register
-    sti
     ret
 ;*****************************************************************************
+
+;*****************************************************************************
+main_enable			dw 0x0000
+main_lock			dw 0x0000
+align 2
+;*****************************************************************************
+main_idler:
+    call   bios_idle
+
+    cmp    b[main_enable], 0 	; global enable toggled by delta_config
+    je     main_idler		; if disabled, skip MSC routines
+
+    cmp    b[rx_spin_lock], 0
+    jne    main_idler
+    cmp    b[tx_spin_lock], 0
+    jne    main_idler
+   
+    call   usb_host_to_dev_handler ; handle any input from host
+    call   usb_dev_to_host_handler ; handle any output to host
+
+    jmp    main_idler
+;*****************************************************************************
+
 
 ;*****************************************************************************
 ;;;;;; Intercepts
@@ -1071,28 +1031,28 @@ ActualLBA_3			EQU	(actual_lba_uw + 1)
 ;*****************************************************************************
 load_lba_block:
     ;; debug only right now:
-    int    PUSHALL_INT
-    call   print_newline
-    mov	   r0, 0x004C		; L
-    call   dbg_putchar
-    mov	   r0, 0x0052		; R
-    call   dbg_putchar   
-    mov	   r0, 0x003D		; =
-    call   dbg_putchar
-    mov    r1, b[Read10_SCSI_CDB_LBA_3]
-    and    r1, 0xFF
-    call   print_hex_byte
-    mov    r1, b[Read10_SCSI_CDB_LBA_2]
-    and    r1, 0xFF
-    call   print_hex_byte
-    mov    r1, b[Read10_SCSI_CDB_LBA_1]
-    and    r1, 0xFF
-    call   print_hex_byte
-    mov    r1, b[Read10_SCSI_CDB_LBA_0]
-    and    r1, 0xFF
-    call   print_hex_byte
-    call   print_newline
-    int    POPALL_INT
+    ;; int    PUSHALL_INT
+    ;; call   print_newline
+    ;; mov	   r0, 0x004C		; L
+    ;; call   dbg_putchar
+    ;; mov	   r0, 0x0052		; R
+    ;; call   dbg_putchar   
+    ;; mov	   r0, 0x003D		; =
+    ;; call   dbg_putchar
+    ;; mov    r1, b[Read10_SCSI_CDB_LBA_3]
+    ;; and    r1, 0xFF
+    ;; call   print_hex_byte
+    ;; mov    r1, b[Read10_SCSI_CDB_LBA_2]
+    ;; and    r1, 0xFF
+    ;; call   print_hex_byte
+    ;; mov    r1, b[Read10_SCSI_CDB_LBA_1]
+    ;; and    r1, 0xFF
+    ;; call   print_hex_byte
+    ;; mov    r1, b[Read10_SCSI_CDB_LBA_0]
+    ;; and    r1, 0xFF
+    ;; call   print_hex_byte
+    ;; call   print_newline
+    ;; int    POPALL_INT
 
     ;; int    PUSHALL_INT
     ;; call   print_newline
@@ -1201,28 +1161,28 @@ load_lba_block:
     ;; correction done.
 
     ;; print corrected:
-    int    PUSHALL_INT
-    call   print_newline
-    mov	   r0, 0x005A		; Z
-    call   dbg_putchar
-    mov	   r0, 0x0052		; R
-    call   dbg_putchar   
-    mov	   r0, 0x003D		; =
-    call   dbg_putchar
-    mov    r1, b[ActualLBA_3]
-    and    r1, 0xFF
-    call   print_hex_byte
-    mov    r1, b[ActualLBA_2]
-    and    r1, 0xFF
-    call   print_hex_byte
-    mov    r1, b[ActualLBA_1]
-    and    r1, 0xFF
-    call   print_hex_byte
-    mov    r1, b[ActualLBA_0]
-    and    r1, 0xFF
-    call   print_hex_byte
-    call   print_newline
-    int    POPALL_INT
+    ;; int    PUSHALL_INT
+    ;; call   print_newline
+    ;; mov	   r0, 0x005A		; Z
+    ;; call   dbg_putchar
+    ;; mov	   r0, 0x0052		; R
+    ;; call   dbg_putchar   
+    ;; mov	   r0, 0x003D		; =
+    ;; call   dbg_putchar
+    ;; mov    r1, b[ActualLBA_3]
+    ;; and    r1, 0xFF
+    ;; call   print_hex_byte
+    ;; mov    r1, b[ActualLBA_2]
+    ;; and    r1, 0xFF
+    ;; call   print_hex_byte
+    ;; mov    r1, b[ActualLBA_1]
+    ;; and    r1, 0xFF
+    ;; call   print_hex_byte
+    ;; mov    r1, b[ActualLBA_0]
+    ;; and    r1, 0xFF
+    ;; call   print_hex_byte
+    ;; call   print_newline
+    ;; int    POPALL_INT
     
 no_block_correction:
     ;; no need to correct for offset:
