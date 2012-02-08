@@ -1058,6 +1058,16 @@ SCSI_data_cmd_report_luns:
 ;*****************************************************************************
 blocks_offset_lw		dw 0x0000
 blocks_offset_uw		dw 0x0000
+
+actual_lba_lw			dw 0x0000
+actual_lba_uw			dw 0x0000
+
+
+ActualLBA_0			EQU	(actual_lba_lw)
+ActualLBA_1			EQU	(actual_lba_lw + 1)
+ActualLBA_2			EQU	(actual_lba_uw)
+ActualLBA_3			EQU	(actual_lba_uw + 1)
+
 ;*****************************************************************************
 load_lba_block:
     ;; debug only right now:
@@ -1163,27 +1173,31 @@ load_lba_block:
     clc
     add    r3, w[blocks_offset_lw] ; add lw of corrector to low word of LBA
     addc   r4, w[blocks_offset_uw] ; add possible carry to high word of LBA
+
+    ;; write actual LBA to access:
+    mov    w[actual_lba_lw], r3
+    mov    w[actual_lba_uw], r4
     
     ;; write low word of corrected LBA back:
-    mov    r5, r3
-    and    r5, 0x00FF
-    mov    b[Read10_SCSI_CDB_LBA_0], r5
+    ;; mov    r5, r3
+    ;; and    r5, 0x00FF
+    ;; mov    b[Read10_SCSI_CDB_LBA_0], r5
 
-    mov    r5, r3
-    clc
-    shr    r5, 8
-    and    r5, 0x00FF
-    mov    b[Read10_SCSI_CDB_LBA_1], r5
+    ;; mov    r5, r3
+    ;; clc
+    ;; shr    r5, 8
+    ;; and    r5, 0x00FF
+    ;; mov    b[Read10_SCSI_CDB_LBA_1], r5
     
-    ;; write high word of corrected LBA back:
-    mov    r5, r4
-    and    r5, 0x00FF
-    mov    b[Read10_SCSI_CDB_LBA_3], r5
-    mov    r5, r4
-    clc
-    shr    r5, 8
-    and    r5, 0x00FF
-    mov    b[Read10_SCSI_CDB_LBA_2], r5
+    ;; ;; write high word of corrected LBA back:
+    ;; mov    r5, r4
+    ;; and    r5, 0x00FF
+    ;; mov    b[Read10_SCSI_CDB_LBA_3], r5
+    ;; mov    r5, r4
+    ;; clc
+    ;; shr    r5, 8
+    ;; and    r5, 0x00FF
+    ;; mov    b[Read10_SCSI_CDB_LBA_2], r5
     ;; correction done.
 
     ;; print corrected:
@@ -1195,16 +1209,16 @@ load_lba_block:
     call   dbg_putchar   
     mov	   r0, 0x003D		; =
     call   dbg_putchar
-    mov    r1, b[Read10_SCSI_CDB_LBA_3]
+    mov    r1, b[ActualLBA_3]
     and    r1, 0xFF
     call   print_hex_byte
-    mov    r1, b[Read10_SCSI_CDB_LBA_2]
+    mov    r1, b[ActualLBA_2]
     and    r1, 0xFF
     call   print_hex_byte
-    mov    r1, b[Read10_SCSI_CDB_LBA_1]
+    mov    r1, b[ActualLBA_1]
     and    r1, 0xFF
     call   print_hex_byte
-    mov    r1, b[Read10_SCSI_CDB_LBA_0]
+    mov    r1, b[ActualLBA_0]
     and    r1, 0xFF
     call   print_hex_byte
     call   print_newline
@@ -1219,42 +1233,42 @@ no_block_correction:
     ;; 320 == 0x0140
     
     ;; Upper two LBA address bytes must be zero
-    cmp	   b[Read10_SCSI_CDB_LBA_3], 0x00
+    cmp	   b[ActualLBA_3], 0x00
     jne    zero_block
-    cmp	   b[Read10_SCSI_CDB_LBA_2], 0x00
+    cmp	   b[ActualLBA_2], 0x00
     jne    zero_block
 
-    cmp	   b[Read10_SCSI_CDB_LBA_1], 0x00
+    cmp	   b[ActualLBA_1], 0x00
     je     @f
-    cmp	   b[Read10_SCSI_CDB_LBA_1], 0x01
+    cmp	   b[ActualLBA_1], 0x01
     jne    @f
-    cmp	   b[Read10_SCSI_CDB_LBA_0], 0x40
+    cmp	   b[ActualLBA_0], 0x40
     jne    zero_block
     ;; block 320;
     mov    r8, block_320
     jmp    load_block
 @@:
-    cmp	   b[Read10_SCSI_CDB_LBA_0], 0
+    cmp	   b[ActualLBA_0], 0
     jne    @f
     mov    r8, block_0
     jmp    load_block
 @@:
-    cmp	   b[Read10_SCSI_CDB_LBA_0], 10
+    cmp	   b[ActualLBA_0], 10
     jne    @f
     mov    r8, block_10
     jmp    load_block
 @@:
-    cmp	   b[Read10_SCSI_CDB_LBA_0], 63
+    cmp	   b[ActualLBA_0], 63
     jne    @f
     mov    r8, block_63
     jmp    load_block
 @@:
-    cmp	   b[Read10_SCSI_CDB_LBA_0], 64
+    cmp	   b[ActualLBA_0], 64
     jne    @f
     mov    r8, block_64
     jmp    load_block
 @@:
-    cmp	   b[Read10_SCSI_CDB_LBA_0], 192
+    cmp	   b[ActualLBA_0], 192
     jne    zero_block
     mov    r8, block_192
 load_block:
