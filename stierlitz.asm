@@ -45,12 +45,15 @@ include debug.asm ;; RS-232 Debugger
 ;; TODO: enable watchdog timer?
 
 ;*****************************************************************************
+;*****************************************************************************
+
+;*****************************************************************************
 ;; Set up BIOS hooks.
 ;*****************************************************************************
 init_code:
     call   dbg_enable ; Enable RS-232 Debug Port.
 
-    call   insert_vectors
+    call   insert_vectors ; Overwrite stock ISRs
 
     call   print_newline
     mov	   r0, 0x002A		; *
@@ -60,10 +63,10 @@ init_code:
     xor    r1, r1		; full speed
     mov    r2, 2		; SIE2
     int    SUSB_INIT_INT
-    
+
+    ;; enable idler:
     mov    b[main_enable], 0x00 ; we want to enable self when configured
     mov    [(IDLER_INT*2)], aux_idler
-   
     ret
 ;*****************************************************************************
 
@@ -82,6 +85,7 @@ aux_idler:
     int    IDLER_INT
 ;*****************************************************************************
 
+
 ;*****************************************************************************
 main_enable			dw 0x0000
 main_lock			dw 0x0000
@@ -89,20 +93,13 @@ align 2
 ;*****************************************************************************
 main_idler:
     call   bios_idle
-
     cmp    b[main_enable], 0 	; global enable toggled by delta_config
     je     main_idler		; if disabled, skip MSC routines
-
-    cmp    b[rx_spin_lock], 0
-    jne    main_idler
-    cmp    b[tx_spin_lock], 0
-    jne    main_idler
-
     call   usb_host_to_dev_handler ; handle any input from host
     call   usb_dev_to_host_handler ; handle any output to host
-    
     jmp    main_idler
 ;*****************************************************************************
+
 
 align 2
 ;*****************************************************************************

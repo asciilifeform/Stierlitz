@@ -5,9 +5,35 @@
 ;*****************************************************************************
 
 ;*****************************************************************************
+;; wait for event on EP1
+;*****************************************************************************
+wait_for_ep1_in_fired:
+@@:
+    call   bios_idle
+    cmp    b[ep1_in_fired], 0x01
+    jne    @b
+    mov    b[ep1_in_fired], 0x00
+    ret
+;*****************************************************************************
+
+
+;*****************************************************************************
+;; wait for event on EP2
+;*****************************************************************************
+wait_for_ep2_out_fired:
+@@:
+    call   bios_idle
+    cmp    b[ep2_out_fired], 0x01
+    jne    @b
+    mov    b[ep2_out_fired], 0x00
+    ret
+;*****************************************************************************
+
+
+;*****************************************************************************
 ; Transmit usbsend_len bytes to endpoint send_endpoint from send_buffer.
 ;*****************************************************************************
-tx_spin_lock			db 0x00
+;; tx_spin_lock			db 0x00
 send_buffer_offset		dw 0x0000
 align 2
 ;*****************************************************************************
@@ -17,25 +43,20 @@ usb_send_data:
     mov    r0, w[send_buffer_offset]
     add    w[usbsend_addr], r0
     mov    w[usbsend_call], usb_send_done ;; set up callback
-    mov    b[tx_spin_lock], 1
+    ;; mov    b[tx_spin_lock], 1
 usb_tx:
     mov    r8, usbsend_link	; pointer to linker
     xor    r1, r1
     mov    r1, EP_IN ; which endpoint to send to
     int    SUSB2_SEND_INT	; call interrupt
-@@:
-    call   bios_idle
-    cmp    b[tx_spin_lock], 0
-    je     @b
-
+    call   wait_for_ep1_in_fired
     mov    r0, w[usbsend_len]
     cmp    r0, 0x0000
     jne    usb_tx
-    mov    b[tx_spin_lock], 0
-
+    ;; mov    b[tx_spin_lock], 0
     ret
 usb_send_done: ;; Callback
-    mov    b[tx_spin_lock], 0
+    ;; mov    b[tx_spin_lock], 0
     ret
 ;*****************************************************************************
 ;; Send data structure
@@ -53,10 +74,6 @@ usbsend_call			dw 0x0000
 ;*****************************************************************************
 bulk_send:
     call   usb_send_data	; transmit answer
-
-    mov    r0, 150		; 150
-    call   delay
-
     mov    r0, w[usbsend_len]	; bytes failed (0 if all were sent.)
     ret
 ;*****************************************************************************
@@ -66,12 +83,11 @@ bulk_send:
 ; Receive usbrecv_length bytes of data from Bulk OUT endpoint into receive_buffer.
 ; r0 will equal number of bytes NOT received.
 ;*****************************************************************************
-rx_spin_lock			db 0x00
+;; rx_spin_lock			db 0x00
 align 2
 ;*****************************************************************************
 usb_receive_data:
-    mov    b[rx_spin_lock], 1
-
+    ;; mov    b[rx_spin_lock], 1
     mov    w[usbrecv_link], 0
     mov    w[usbrecv_addr], receive_buffer
     mov    w[usbrecv_call], receiver_done
@@ -80,18 +96,13 @@ usb_rx:
     mov    r1, EP_OUT           ; from which endpoint to receive
     and    r1, 0x0F
     int    SUSB2_RECEIVE_INT	; call interrupt
-@@:
-    call   bios_idle
-    cmp    b[rx_spin_lock], 0
-    jne    @b
-
+    call   wait_for_ep2_out_fired
     mov    r0, w[usbrecv_len]
     cmp    r0, 0x0000
     jne    usb_rx
-
     ret
 receiver_done:
-    mov    b[rx_spin_lock], 0
+    ;; mov    b[rx_spin_lock], 0
     ;; mov    r0, w[usbrecv_len]	; bytes failed (0 if all were received.)
     ret
 ;*****************************************************************************

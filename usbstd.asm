@@ -6,10 +6,12 @@
 ;; Replace stock vectors
 ;*****************************************************************************
 ;; save bios handlers here:
-bios_standard_request_handler:	dw 0xDEAD
-bios_class_request_handler: 	dw 0xDEAD
-bios_configuration_change:  	dw 0xDEAD
-bios_idle_chain:  		dw 0xDEAD
+bios_standard_request_handler:	dw	0xDEAD
+bios_class_request_handler: 	dw	0xDEAD
+bios_configuration_change:  	dw	0xDEAD
+bios_idle_chain:  		dw	0xDEAD
+bios_ep1_in_isr:    		dw	0xDEAD
+bios_ep2_out_isr:   		dw	0xDEAD
 ;*****************************************************************************
 insert_vectors:
     ; Update BIOS SIE2 descriptor pointers.
@@ -24,6 +26,39 @@ insert_vectors:
     mov    [(SUSB2_STANDARD_INT*2)], my_standard_request_handler
     mov    [(SUSB2_CLASS_INT*2)], my_class_request_handler
     mov    [(SUSB2_DELTA_CONFIG_INT*2)], my_configuration_change
+    ;; Overwrite EP ISRs
+    mov    w[bios_ep1_in_isr], w[SIE2_EP1_VEC]
+    mov    w[bios_ep2_out_isr], w[SIE2_EP2_VEC]
+    mov    w[SIE2_EP1_VEC], my_ep1_in_vec
+    mov    w[SIE2_EP2_VEC], my_ep2_out_vec
+    ret
+;*****************************************************************************
+
+
+;*****************************************************************************
+ep1_in_fired		db	0x00
+;*****************************************************************************
+my_ep1_in_vec:			; fires on packet SENDING
+    call   [bios_ep1_in_isr]
+    push   [CPU_FLAGS_REG]	; push flags register
+    int    PUSHALL_INT
+    addi   b[ep1_in_fired], 1
+    int    POPALL_INT
+    pop    [CPU_FLAGS_REG]	; push flags register
+    ret
+;*****************************************************************************
+
+
+;*****************************************************************************
+ep2_out_fired		db	0x00
+;*****************************************************************************
+my_ep2_out_vec:			; fires on packet RECEIVING
+    call   [bios_ep2_out_isr]
+    push   [CPU_FLAGS_REG]	; push flags register
+    int    PUSHALL_INT
+    addi   b[ep2_out_fired], 1
+    int    POPALL_INT
+    pop    [CPU_FLAGS_REG]	; push flags register
     ret
 ;*****************************************************************************
 
