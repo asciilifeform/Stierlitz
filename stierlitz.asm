@@ -79,7 +79,7 @@ init_code:
     call   print_newline
     mov	   r0, 0x002A		; *
     call   dbg_putchar
-
+    
     ;; Init Timer:
     mov	   [TMR1_IRQ_EN], main_timer ; New Timer1 ISR
     or     [IRQ_EN_REG], 2	     ; enable timer1 interrupt
@@ -129,6 +129,19 @@ init_code:
 
 
 ;*****************************************************************************
+;; Delay - call idle loop R0 times
+;*****************************************************************************
+delay:
+    int    PUSHALL_INT
+    int    IDLE_INT
+    int    POPALL_INT
+    subi   r0, 1
+    jnz    delay
+    ret
+;*****************************************************************************
+
+
+;*****************************************************************************
 ;; Main Timer - called periodically by the BIOS.
 ;*****************************************************************************
 main_enable			db 0x00
@@ -144,20 +157,25 @@ main_timer:
     je     main_disabled	; if disabled, skip MSC routines
  
     ;; print SCSI state:
-    call   print_newline
-    mov	   r0, 0x0051		; Q
-    call   dbg_putchar
-    mov	   r0, 0x003D		; =
-    call   dbg_putchar
-    xor    r1, r1
-    mov    r1, b[scsi_state]
-    call   print_hex_byte
-    
+    ;; call   print_newline
+    ;; mov	   r0, 0x0051		; Q
+    ;; call   dbg_putchar
+    ;; mov	   r0, 0x003D		; =
+    ;; call   dbg_putchar
+    ;; xor    r1, r1
+    ;; mov    r1, b[scsi_state]
+    ;; call   print_hex_byte
+
+   
     call   usb_host_to_dev_handler ; handle any input from host
-    call   usb_dev_to_host_handler ; handle any output to host
+
+    ;; mov    r0, 100
+    ;; call   delay
     
-    mov	   r0, 0x002E		; .
-    call   dbg_putchar
+    call   usb_dev_to_host_handler ; handle any output to host
+
+    ;; mov	   r0, 0x002E		; .
+    ;; call   dbg_putchar
 
 main_disabled:
     mov    [TMR1_REG], TMR_INTERVAL	; reload timer 1
@@ -324,22 +342,22 @@ usbsend_call			dw 0x0000
 ; r0 will equal number of bytes which were NOT sent.
 ;*****************************************************************************
 bulk_send:
-    int    PUSHALL_INT
-    call   print_newline
-    mov	   r0, 0x006e		; n
-    call   dbg_putchar
-    mov	   r0, 0x003D		; =
-    call   dbg_putchar
-    mov    r1, w[usbsend_len]
-    shr    r1, 8
-    and    r1, 0xFF
-    call   print_hex_byte
-    mov    r1, w[usbsend_len]
-    and    r1, 0xFF
-    call   print_hex_byte
-    call   print_newline
-    ;; call   dbg_dump_tx_buffer	; debug
-    int    POPALL_INT
+    ;; int    PUSHALL_INT
+    ;; call   print_newline
+    ;; mov	   r0, 0x006e		; n
+    ;; call   dbg_putchar
+    ;; mov	   r0, 0x003D		; =
+    ;; call   dbg_putchar
+    ;; mov    r1, w[usbsend_len]
+    ;; shr    r1, 8
+    ;; and    r1, 0xFF
+    ;; call   print_hex_byte
+    ;; mov    r1, w[usbsend_len]
+    ;; and    r1, 0xFF
+    ;; call   print_hex_byte
+    ;; call   print_newline
+    ;; ;; call   dbg_dump_tx_buffer	; debug
+    ;; int    POPALL_INT
 
     call   usb_send_data	; transmit answer
     
@@ -665,23 +683,23 @@ handle_data_in:
     mov    w[iChunk], r0 ; otherwise, iChunk <- r0 (dwTransferSize - dwOffset).
 @@:
 
-    int    PUSHALL_INT
-    call   print_newline
-    mov	   r0, 0x0043		; C
-    call   dbg_putchar
-    mov	   r0, 0x004C		; L
-    call   dbg_putchar
-    mov	   r0, 0x003D		; =
-    call   dbg_putchar
-    mov    r1, w[iChunk]
-    shr    r1, 8
-    and    r1, 0xFF
-    call   print_hex_byte
-    mov    r1, w[iChunk]
-    and    r1, 0xFF
-    call   print_hex_byte
-    call   print_newline
-    int    POPALL_INT
+    ;; int    PUSHALL_INT
+    ;; call   print_newline
+    ;; mov	   r0, 0x0043		; C
+    ;; call   dbg_putchar
+    ;; mov	   r0, 0x004C		; L
+    ;; call   dbg_putchar
+    ;; mov	   r0, 0x003D		; =
+    ;; call   dbg_putchar
+    ;; mov    r1, w[iChunk]
+    ;; shr    r1, 8
+    ;; and    r1, 0xFF
+    ;; call   print_hex_byte
+    ;; mov    r1, w[iChunk]
+    ;; and    r1, 0xFF
+    ;; call   print_hex_byte
+    ;; call   print_newline
+    ;; int    POPALL_INT
 
     mov    r0, w[iChunk] ; number of bytes to transmit to bulk_in_ep
     mov	   w[usbsend_len], r0
@@ -695,67 +713,67 @@ handle_data_in:
     add    w[dwOffset_lw], r0    ; dwOffset += iChunk
     addc   w[dwOffset_uw], 0 	 ; add possible carry
     
-    int    PUSHALL_INT
-    call   print_newline
-    mov	   r0, 0x004F		; O
-    call   dbg_putchar
-    mov	   r0, 0x004C		; L
-    call   dbg_putchar
-    mov	   r0, 0x003D		; =
-    call   dbg_putchar
-    mov    r1, w[dwOffset_lw]
-    shr    r1, 8
-    and    r1, 0xFF
-    call   print_hex_byte
-    mov    r1, w[dwOffset_lw]
-    and    r1, 0xFF
-    call   print_hex_byte
-    call   print_newline
-    mov	   r0, 0x004F		; O
-    call   dbg_putchar
-    mov	   r0, 0x0055		; U
-    call   dbg_putchar
-    mov	   r0, 0x003D		; =
-    call   dbg_putchar
-    mov    r1, w[dwOffset_uw]
-    shr    r1, 8
-    and    r1, 0xFF
-    call   print_hex_byte
-    mov    r1, w[dwOffset_uw]
-    and    r1, 0xFF
-    call   print_hex_byte
-    call   print_newline
+    ;; int    PUSHALL_INT
+    ;; call   print_newline
+    ;; mov	   r0, 0x004F		; O
+    ;; call   dbg_putchar
+    ;; mov	   r0, 0x004C		; L
+    ;; call   dbg_putchar
+    ;; mov	   r0, 0x003D		; =
+    ;; call   dbg_putchar
+    ;; mov    r1, w[dwOffset_lw]
+    ;; shr    r1, 8
+    ;; and    r1, 0xFF
+    ;; call   print_hex_byte
+    ;; mov    r1, w[dwOffset_lw]
+    ;; and    r1, 0xFF
+    ;; call   print_hex_byte
+    ;; call   print_newline
+    ;; mov	   r0, 0x004F		; O
+    ;; call   dbg_putchar
+    ;; mov	   r0, 0x0055		; U
+    ;; call   dbg_putchar
+    ;; mov	   r0, 0x003D		; =
+    ;; call   dbg_putchar
+    ;; mov    r1, w[dwOffset_uw]
+    ;; shr    r1, 8
+    ;; and    r1, 0xFF
+    ;; call   print_hex_byte
+    ;; mov    r1, w[dwOffset_uw]
+    ;; and    r1, 0xFF
+    ;; call   print_hex_byte
+    ;; call   print_newline
 
-    call   print_newline
-    mov	   r0, 0x0054		; T
-    call   dbg_putchar
-    mov	   r0, 0x004C		; L
-    call   dbg_putchar
-    mov	   r0, 0x003D		; =
-    call   dbg_putchar
-    mov    r1, w[CBW_data_transfer_length_lw]
-    shr    r1, 8
-    and    r1, 0xFF
-    call   print_hex_byte
-    mov    r1, w[CBW_data_transfer_length_lw]
-    and    r1, 0xFF
-    call   print_hex_byte
-    call   print_newline
-    mov	   r0, 0x0054		; T
-    call   dbg_putchar
-    mov	   r0, 0x0055		; U
-    call   dbg_putchar
-    mov	   r0, 0x003D		; =
-    call   dbg_putchar
-    mov    r1, w[CBW_data_transfer_length_uw]
-    shr    r1, 8
-    and    r1, 0xFF
-    call   print_hex_byte
-    mov    r1, w[CBW_data_transfer_length_uw]
-    and    r1, 0xFF
-    call   print_hex_byte
-    call   print_newline
-    int    POPALL_INT
+    ;; call   print_newline
+    ;; mov	   r0, 0x0054		; T
+    ;; call   dbg_putchar
+    ;; mov	   r0, 0x004C		; L
+    ;; call   dbg_putchar
+    ;; mov	   r0, 0x003D		; =
+    ;; call   dbg_putchar
+    ;; mov    r1, w[CBW_data_transfer_length_lw]
+    ;; shr    r1, 8
+    ;; and    r1, 0xFF
+    ;; call   print_hex_byte
+    ;; mov    r1, w[CBW_data_transfer_length_lw]
+    ;; and    r1, 0xFF
+    ;; call   print_hex_byte
+    ;; call   print_newline
+    ;; mov	   r0, 0x0054		; T
+    ;; call   dbg_putchar
+    ;; mov	   r0, 0x0055		; U
+    ;; call   dbg_putchar
+    ;; mov	   r0, 0x003D		; =
+    ;; call   dbg_putchar
+    ;; mov    r1, w[CBW_data_transfer_length_uw]
+    ;; shr    r1, 8
+    ;; and    r1, 0xFF
+    ;; call   print_hex_byte
+    ;; mov    r1, w[CBW_data_transfer_length_uw]
+    ;; and    r1, 0xFF
+    ;; call   print_hex_byte
+    ;; call   print_newline
+    ;; int    POPALL_INT
 
     ;; are we done?
     cmp    w[dwOffset_lw], w[dwTransferSize_lw]
@@ -809,8 +827,8 @@ stall_bulk_in_ep: ; Select endpoint 1 (IN) control register
     mov    r9, DEV2_EP1_CTL_REG
 set_stall_bit: ; Stall the endpoint:
     or     [r9], STALL_EN
-    ;; mov	   r0, 0x0053		; S
-    ;; call   dbg_putchar
+    mov	   r0, 0x0053		; S
+    call   dbg_putchar
     ret
 ;*****************************************************************************
 
@@ -822,17 +840,17 @@ send_csw:
     and    r0, 0xFF
     mov    b[CSW_status], r0
 
-    int    PUSHALL_INT
-    call   print_newline
-    mov	   r0, 0x0074		; t
-    call   dbg_putchar
-    mov	   r0, 0x003D		; =
-    call   dbg_putchar
-    xor    r1, r1
-    mov    r1, b[CSW_status]
-    call   print_hex_byte
-    call   print_newline
-    int    POPALL_INT
+    ;; int    PUSHALL_INT
+    ;; call   print_newline
+    ;; mov	   r0, 0x0074		; t
+    ;; call   dbg_putchar
+    ;; mov	   r0, 0x003D		; =
+    ;; call   dbg_putchar
+    ;; xor    r1, r1
+    ;; mov    r1, b[CSW_status]
+    ;; call   print_hex_byte
+    ;; call   print_newline
+    ;; int    POPALL_INT
     
     mov    w[MSC_CSW_Signature_lw], CSW_Signature_lw_expected ; signature lower word
     mov    w[MSC_CSW_Signature_uw], CSW_Signature_uw_expected ; signature upper word
@@ -855,33 +873,33 @@ send_csw:
     mov    w[CSW_data_residue_uw], r1
     mov    b[scsi_state], SCSI_state_CSW ; next SCSI state = CSW
 
-    int    PUSHALL_INT
-    call   print_newline
-    mov	   r0, 0x004C		; L
-    call   dbg_putchar
-    mov	   r0, 0x003D		; =
-    call   dbg_putchar
-    mov    r1, w[CSW_data_residue_lw]
-    shr    r1, 8
-    and    r1, 0xFF
-    call   print_hex_byte
-    mov    r1, w[CSW_data_residue_lw]
-    and    r1, 0xFF
-    call   print_hex_byte
-    call   print_newline
-    mov	   r0, 0x0055		; U
-    call   dbg_putchar
-    mov	   r0, 0x003D		; =
-    call   dbg_putchar
-    mov    r1, w[CSW_data_residue_uw]
-    shr    r1, 8
-    and    r1, 0xFF
-    call   print_hex_byte
-    mov    r1, w[CSW_data_residue_uw]
-    and    r1, 0xFF
-    call   print_hex_byte
-    call   print_newline
-    int    POPALL_INT
+    ;; int    PUSHALL_INT
+    ;; call   print_newline
+    ;; mov	   r0, 0x004C		; L
+    ;; call   dbg_putchar
+    ;; mov	   r0, 0x003D		; =
+    ;; call   dbg_putchar
+    ;; mov    r1, w[CSW_data_residue_lw]
+    ;; shr    r1, 8
+    ;; and    r1, 0xFF
+    ;; call   print_hex_byte
+    ;; mov    r1, w[CSW_data_residue_lw]
+    ;; and    r1, 0xFF
+    ;; call   print_hex_byte
+    ;; call   print_newline
+    ;; mov	   r0, 0x0055		; U
+    ;; call   dbg_putchar
+    ;; mov	   r0, 0x003D		; =
+    ;; call   dbg_putchar
+    ;; mov    r1, w[CSW_data_residue_uw]
+    ;; shr    r1, 8
+    ;; and    r1, 0xFF
+    ;; call   print_hex_byte
+    ;; mov    r1, w[CSW_data_residue_uw]
+    ;; and    r1, 0xFF
+    ;; call   print_hex_byte
+    ;; call   print_newline
+    ;; int    POPALL_INT
     
     ret
 ;*****************************************************************************
@@ -1185,8 +1203,8 @@ SCSI_data_cmd_report_luns:
 ;*****************************************************************************
 ;; Load LBA block
 ;*****************************************************************************
-;; blocks_offset_lw		dw 0x0000
-;; blocks_offset_uw		dw 0x0000
+blocks_offset_lw		dw 0x0000
+blocks_offset_uw		dw 0x0000
 ;*****************************************************************************
 load_lba_block:
     ;; debug only right now:
@@ -1213,9 +1231,32 @@ load_lba_block:
     call   print_newline
     int    POPALL_INT
 
-
+    int    PUSHALL_INT
+    call   print_newline
+    mov	   r0, 0x0051		; Q
+    call   dbg_putchar
+    mov	   r0, 0x0052		; R
+    call   dbg_putchar   
+    mov	   r0, 0x003D		; =
+    call   dbg_putchar
+    mov    r1, w[dwOffset_uw]
+    shr    r1, 8
+    and    r1, 0xFF
+    call   print_hex_byte
+    mov    r1, w[dwOffset_uw]
+    and    r1, 0xFF
+    call   print_hex_byte
+    mov    r1, w[dwOffset_lw]
+    shr    r1, 8
+    and    r1, 0xFF
+    call   print_hex_byte
+    mov    r1, w[dwOffset_lw]
+    and    r1, 0xFF
+    call   print_hex_byte
+    call   print_newline
+    int    POPALL_INT
+    
     ;; find out if offset extends one or more block forward:
-
     mov    r1, w[dwOffset_uw]
     shl    r1, 8
     and    r1, 0xFF00
@@ -1244,9 +1285,34 @@ load_lba_block:
     clc
     shr    r1, 1
     ;; now {r1:r0} = {dwOffset_uw:dwOffset_lw} / 512
-    ;; mov    w[blocks_offset_lw], r0
-    ;; mov    w[blocks_offset_uw], r1
+    mov    w[blocks_offset_lw], r0
+    mov    w[blocks_offset_uw], r1
 
+    int    PUSHALL_INT
+    call   print_newline
+    mov	   r0, 0x0055		; U
+    call   dbg_putchar
+    mov	   r0, 0x0052		; R
+    call   dbg_putchar   
+    mov	   r0, 0x003D		; =
+    call   dbg_putchar
+    mov    r1, w[blocks_offset_uw]
+    shr    r1, 8
+    and    r1, 0xFF
+    call   print_hex_byte
+    mov    r1, w[blocks_offset_uw]
+    and    r1, 0xFF
+    call   print_hex_byte
+    mov    r1, w[blocks_offset_lw]
+    shr    r1, 8
+    and    r1, 0xFF
+    call   print_hex_byte
+    mov    r1, w[blocks_offset_lw]
+    and    r1, 0xFF
+    call   print_hex_byte
+    call   print_newline
+    int    POPALL_INT
+    
     ;; skip block correction if correction factor is zero:
     and    r0, r0
     jnz    @f
@@ -1258,36 +1324,38 @@ load_lba_block:
     ;; load original LBA:
     mov    r4, b[Read10_SCSI_CDB_LBA_3]
     shl    r4, 8
-    and    r4, 0x00FF
-    mov    r4, b[Read10_SCSI_CDB_LBA_2]
+    or     r4, b[Read10_SCSI_CDB_LBA_2]
     ;; r4 = old lba high word
     mov    r3, b[Read10_SCSI_CDB_LBA_1]
     shl    r3, 8
-    and    r3, 0x00FF
-    mov    r3, b[Read10_SCSI_CDB_LBA_0]
+    or     r3, b[Read10_SCSI_CDB_LBA_0]
     ;; r3 = old lba low word
+    
     ;; add correction factor:
     clc
-    add    r3, r0 ; add lw of corrector to low word of LBA
-    addc   r4, 0  ; add possible carry to high word of LBA
+    add    r3, w[blocks_offset_lw] ; add lw of corrector to low word of LBA
+    addc   r4, w[blocks_offset_uw] ; add possible carry to high word of LBA
+    
     ;; write low word of corrected LBA back:
     mov    r5, r3
     and    r5, 0x00FF
     mov    b[Read10_SCSI_CDB_LBA_0], r5
+
     mov    r5, r3
     clc
     shr    r5, 8
     and    r5, 0x00FF
     mov    b[Read10_SCSI_CDB_LBA_1], r5
+    
     ;; write high word of corrected LBA back:
     mov    r5, r4
     and    r5, 0x00FF
-    mov    b[Read10_SCSI_CDB_LBA_2], r5
+    mov    b[Read10_SCSI_CDB_LBA_3], r5
     mov    r5, r4
     clc
     shr    r5, 8
     and    r5, 0x00FF
-    mov    b[Read10_SCSI_CDB_LBA_3], r5
+    mov    b[Read10_SCSI_CDB_LBA_2], r5
     ;; correction done.
 
     ;; print corrected:
