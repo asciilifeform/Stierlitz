@@ -25,8 +25,7 @@
 dev_desc:
       db 0x12       ; bLength
       db 0x01       ; bDescriptorType
-      ; dw 0x0200     ; bcdUSB
-      dw 0x0110     ; bcdUSB
+      dw USB_VER    ; bcdUSB
       db 0x00       ; bDeviceClass
       db 0x00       ; bDeviceSubClass
       db 0x00       ; bDeviceProtocol
@@ -83,35 +82,20 @@ INTERFACE_DESC_LEN equ ($-interface_desc)
 ; EZ-Host/EZ-OTG endpoints descriptor
 ;****************************************************************
 ;; --------------------------------------------------
-;; ------------- ep1 from original BIOS -------------
-;; ep1:  db 7          ; len
-;;       db 5          ; type (endpoint)
-;;       db 0x1        ; type/number  (Host use WriteFile)
-;;       db 2
-;;       dw 64         ; packet size
-;;       db 0          ; interval
-;; --------------------------------------------------
 ep1:  db 0x07       ; len
       db 0x05       ; type (endpoint)
-      db 0x81       ; bEndpointAddress (EP 1 IN)
+      db EP_IN_ADDR ; bEndpointAddress (EP 1 IN)
       db 0x02	    ; bmAttributes = Bulk
-      dw 0x0040     ; packet size = 64 bytes
+      dw USB_PACKET_SIZE ; packet size = 64 bytes
       db 0          ; bInterval
 ;; --------------------------------------------------
 ep2:  db 0x07       ; len
       db 0x05       ; type (endpoint)
-      db 0x02       ; bEndpointAddress (EP 2 OUT)
+      db EP_OUT_ADDR ; bEndpointAddress (EP 2 OUT)
       db 0x02       ; bmAttributes = Bulk
-      dw 0x0040     ; packet size = 64 bytes
+      dw USB_PACKET_SIZE ; packet size = 64 bytes
       db 0          ; bInterval
 ;; --------------------------------------------------
-;================================================
-; support for OTG
-;================================================
-;; otg:  db 3          ; len=3
-;;       db 9          ; type = OTG
-;;       db 3          ; HNP|SRP supported
-
 end_all:
       align 2
 ;================================================
@@ -140,9 +124,4 @@ str3: db STR3_LEN
       dw '300'
 STR3_LEN equ ($-str3)
 ;;-----------------------------------------------
-
-; bEPAddress       equ 2
-; bEPAttribute     equ 3
-; wMaxPacketSize   equ 4
-; bInterval        equ 6
       align 2

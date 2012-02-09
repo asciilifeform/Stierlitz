@@ -24,9 +24,6 @@
 ;*****************************************************************************
 
 BLOCKSIZE			equ	512
-; MAXBLOCK			equ	8388608 ; 4GB
-MAXBLOCK			equ	2097152 ; 1GB
-
 
 ;; SBC2 mandatory SCSI commands
 SCSI_CMD_FORMAT_UNIT		equ	0x04
@@ -107,4 +104,3 @@ MSC_BS_CSW                      equ	5       ;; Command Status Wrapper
 MSC_BS_ERROR                    equ	6       ;; Error
 
 ;*****************************************************************************
-
