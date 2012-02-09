@@ -135,6 +135,7 @@ include usbstd.asm
 include usb-bulk.asm
 include msc.asm
 include util.asm
+include scsi-data.asm
 include scsi-cmd.asm
 include block.asm
 include scsi-state.asm
