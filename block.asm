@@ -38,7 +38,12 @@ load_lba_block:
     ;; call   print_hex_byte
     ;; call   print_newline
     ;; int    POPALL_INT
-    
+
+    mov    b[ActualLBA_0], b[Read10_SCSI_CDB_LBA_0]
+    mov    b[ActualLBA_1], b[Read10_SCSI_CDB_LBA_1]
+    mov    b[ActualLBA_2], b[Read10_SCSI_CDB_LBA_2]
+    mov    b[ActualLBA_3], b[Read10_SCSI_CDB_LBA_3]
+
     ;; find out if offset extends one or more block forward:
     mov    r1, w[dwOffset_uw]
     shl    r1, 8
