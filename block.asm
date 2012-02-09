@@ -43,32 +43,6 @@ load_lba_block:
 
     call   compute_actual_block_index
     
-    ;; correction done.
-
-    ;; print corrected:
-    ;; int    PUSHALL_INT
-    ;; call   print_newline
-    ;; mov	   r0, 0x005A		; Z
-    ;; call   dbg_putchar
-    ;; mov	   r0, 0x0052		; R
-    ;; call   dbg_putchar   
-    ;; mov	   r0, 0x003D		; =
-    ;; call   dbg_putchar
-    ;; mov    r1, b[ActualLBA_3]
-    ;; and    r1, 0xFF
-    ;; call   print_hex_byte
-    ;; mov    r1, b[ActualLBA_2]
-    ;; and    r1, 0xFF
-    ;; call   print_hex_byte
-    ;; mov    r1, b[ActualLBA_1]
-    ;; and    r1, 0xFF
-    ;; call   print_hex_byte
-    ;; mov    r1, b[ActualLBA_0]
-    ;; and    r1, 0xFF
-    ;; call   print_hex_byte
-    ;; call   print_newline
-    ;; int    POPALL_INT
-    
     ;; We have blocks: 0, 10, 63, 64, 192, 320
 
     ;; 320 == 0x0140
@@ -127,28 +101,28 @@ zero_block:
 ;*****************************************************************************
 save_lba_block:
     ;; debug only right now:
-    int    PUSHALL_INT
-    call   print_newline
-    mov	   r0, 0x004C		; L
-    call   dbg_putchar
-    mov	   r0, 0x0057		; W
-    call   dbg_putchar
-    mov	   r0, 0x003D		; =
-    call   dbg_putchar
-    mov    r1, b[Write10_SCSI_CDB_LBA_3]
-    and    r1, 0xFF
-    call   print_hex_byte
-    mov    r1, b[Write10_SCSI_CDB_LBA_2]
-    and    r1, 0xFF
-    call   print_hex_byte
-    mov    r1, b[Write10_SCSI_CDB_LBA_1]
-    and    r1, 0xFF
-    call   print_hex_byte
-    mov    r1, b[Write10_SCSI_CDB_LBA_0]
-    and    r1, 0xFF
-    call   print_hex_byte
-    call   print_newline
-    int    POPALL_INT
+    ;; int    PUSHALL_INT
+    ;; call   print_newline
+    ;; mov	   r0, 0x004C		; L
+    ;; call   dbg_putchar
+    ;; mov	   r0, 0x0057		; W
+    ;; call   dbg_putchar
+    ;; mov	   r0, 0x003D		; =
+    ;; call   dbg_putchar
+    ;; mov    r1, b[Write10_SCSI_CDB_LBA_3]
+    ;; and    r1, 0xFF
+    ;; call   print_hex_byte
+    ;; mov    r1, b[Write10_SCSI_CDB_LBA_2]
+    ;; and    r1, 0xFF
+    ;; call   print_hex_byte
+    ;; mov    r1, b[Write10_SCSI_CDB_LBA_1]
+    ;; and    r1, 0xFF
+    ;; call   print_hex_byte
+    ;; mov    r1, b[Write10_SCSI_CDB_LBA_0]
+    ;; and    r1, 0xFF
+    ;; call   print_hex_byte
+    ;; call   print_newline
+    ;; int    POPALL_INT
     ret
 ;*****************************************************************************
 
@@ -228,5 +202,40 @@ compute_actual_block_index:
     and    r5, 0x00FF
     mov    b[ActualLBA_2], r5
 no_block_correction:
+    ret
+;*****************************************************************************
+
+
+;*****************************************************************************
+;; Print current block index:
+;*****************************************************************************
+dbg_print_read_block_index:
+    int    PUSHALL_INT
+    mov	   r0, 0x0052		; R
+    jmp    @f
+dbg_print_write_block_index:
+    int    PUSHALL_INT
+    mov	   r0, 0x0057		; W
+@@:
+    call   dbg_putchar
+    call   print_newline
+    mov	   r0, 0x0042		; B
+    call   dbg_putchar   
+    mov	   r0, 0x003D		; =
+    call   dbg_putchar
+    mov    r1, b[ActualLBA_3]
+    and    r1, 0xFF
+    call   print_hex_byte
+    mov    r1, b[ActualLBA_2]
+    and    r1, 0xFF
+    call   print_hex_byte
+    mov    r1, b[ActualLBA_1]
+    and    r1, 0xFF
+    call   print_hex_byte
+    mov    r1, b[ActualLBA_0]
+    and    r1, 0xFF
+    call   print_hex_byte
+    call   print_newline
+    int    POPALL_INT
     ret
 ;*****************************************************************************
