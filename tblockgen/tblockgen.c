@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 
+#define BLOCKSIZE 512
 
 void printusage(int argc, char *argv[]) {
   printf("Usage: %s -n BLOCKCOUNT -f FILE\n", argv[0]);
@@ -10,7 +11,7 @@ void printusage(int argc, char *argv[]) {
 
 void make_block(unsigned int i, char *block) {
   int j;
-  for (j = 0; j < 512; j += 16) {
+  for (j = 0; j < BLOCKSIZE; j += 16) {
     sprintf(block + j, "%16d", i);
   }
 }
@@ -19,7 +20,7 @@ void make_block(unsigned int i, char *block) {
 int main(int argc, char *argv[]) {
   FILE *fp;
   unsigned int blk_count, i;
-  char block[512];
+  char block[BLOCKSIZE];
   char c;
 
   blk_count = 0;
@@ -61,7 +62,7 @@ int main(int argc, char *argv[]) {
 
   for (i = 0; i < blk_count; i++) {
     make_block(i, block);
-    if (fwrite(block, 512, 1, fp) <= 0) {
+    if (fwrite(block, BLOCKSIZE, 1, fp) <= 0) {
       printf("Error saving block %d!\n", i);
       exit(1);
     }

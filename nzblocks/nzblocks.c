@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 
+#define BLOCKSIZE 512
 
 void printusage(int argc, char *argv[]) {
   printf("Usage: %s OPTS -f FILE\n", argv[0]);
@@ -15,7 +16,7 @@ void saveblock_binary(unsigned int n, unsigned char *block) {
   char filename[128];
   sprintf(filename, "blk-%d.bin", n);
   fp = fopen(filename, "w");
-  if (fwrite(block, 512, 1, fp) <= 0) {
+  if (fwrite(block, BLOCKSIZE, 1, fp) <= 0) {
     printf("Error saving block %d to file: '%s'\n", n, filename);
     exit(1);
   }
@@ -31,7 +32,7 @@ void saveblock_asm(unsigned int n, unsigned char *block) {
   fp = fopen(filename, "w");
   fprintf(fp, ";; Block no. %d\n", n);
   fprintf(fp, "block_%d:\n", n);
-  for (i = 0; i < 512; i++) {
+  for (i = 0; i < BLOCKSIZE; i++) {
     fprintf(fp, "\tdb\t0x%02x\n", block[i]);
   }
   fclose(fp);
@@ -41,7 +42,7 @@ void saveblock_asm(unsigned int n, unsigned char *block) {
 int main(int argc, char *argv[]) {
   FILE *fp;
   unsigned int nzblocks, blk_count, i;
-  unsigned char block[512];
+  unsigned char block[BLOCKSIZE];
   char c;
   void (*saver)(unsigned int, unsigned char*);
 
@@ -84,8 +85,8 @@ int main(int argc, char *argv[]) {
   blk_count = 0;
   nzblocks = 0;
 
-  while (fread(&block, 512, 1, fp) > 0) {
-    for (i = 0; i < 512; i++) {
+  while (fread(&block, BLOCKSIZE, 1, fp) > 0) {
+    for (i = 0; i < BLOCKSIZE; i++) {
       if (block[i] != 0) {
 	printf("Block %d non-zero\n", blk_count);
 	(*saver)(blk_count, block);
