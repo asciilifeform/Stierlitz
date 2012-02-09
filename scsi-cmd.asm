@@ -149,6 +149,10 @@ SCSI_command_read_10:
     ;; now, rsplen = dwLen * 512
     mov    w[response_length_lw], r0
     mov    w[response_length_uw], r1
+    ;; TODO: error condition if the blocks to be read extend past end of "disk"
+    ;; for now, "doctor, it hurts when I do that! - so don't do that."
+    ;; TODO: find out if stock DD command does "it"...
+    ;; TODO: same goes for WRITE commands
     ret
 SCSI_command_write_6:
     jmp    scsi_cmd_not_implemented ;;;;;; NOT IMPLEMENTED YET ;;;;;;

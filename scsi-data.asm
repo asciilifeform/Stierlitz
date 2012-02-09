@@ -70,7 +70,7 @@ handle_data_in:
     ;; send data to host?
     ;; if (dwOffset < dwTransferSize)
     ;; iChunk = MIN(64, dwTransferSize - dwOffset)
-    mov    w[iChunk], 64 	; start with 64
+    mov    w[iChunk], USB_PACKET_SIZE ; start with 64
     mov    r0, w[dwTransferSize_lw]
     mov    r1, w[dwTransferSize_uw] ; R1:R0 = dwTransferSize
     mov    r2, w[dwOffset_lw]
@@ -78,21 +78,18 @@ handle_data_in:
     ;; R1:R0 - R3:R2
     call   subtract_16
     cmp    r1, 0
-    jne    @f	  ; if upper word of subtraction result is nonzero, then definitely > 64
+    jne    @f ; if upper word of subtraction result is nonzero, then definitely > 64
 
     mov    r4, r0
-    and    r4, 0xFFC0
-    jnz    @f	  ; if lower word is greater than 64, then keep iChunk == 64.
-    
+    and    r4, (1 + (0xFFFF - USB_PACKET_SIZE)) ; 64: 0xFFC0
+    jnz    @f ; if lower word is greater than 64, then keep iChunk == 64.
     mov    w[iChunk], r0 ; otherwise, iChunk <- r0 (dwTransferSize - dwOffset).
 @@:
     mov    r0, w[iChunk] ; number of bytes to transmit to bulk_in_ep
     mov	   w[usbsend_len], r0
-
     mov    r0, w[dwOffset_lw] ; only need lower word of dwoffset to calculate offset into block
     and    r0, 0x01FF ;; dwBufPos = (dwOffset & (BLOCKSIZE - 1))
     mov    w[send_buffer_offset], r0
-    
     call   bulk_send	; transmit bytes to host
     mov    r0, w[iChunk]
     add    w[dwOffset_lw], r0    ; dwOffset += iChunk
