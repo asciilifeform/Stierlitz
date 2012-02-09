@@ -39,9 +39,9 @@ PRODUCT_ID  equ 0x0020		; "TravelDrive"
 ORIGIN equ 0x500
 
 .xlist
-    include 67300.asm
-    ;; include lcp_cmd.asm
-    ;; include lcp_data.asm
+    include cypress/67300.inc
+    ;; include lcp_cmd.inc
+    ;; include lcp_data.inc
     include storage.asm
 .list
 
