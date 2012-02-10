@@ -3,7 +3,7 @@
 ;*****************************************************************************
 BOOT_SIGNATURE				equ	0xaa55
 
-;; Partition Record
+;; Partition Record in MBR
 PART0_RECORD_OFFSET			equ     0x01BE
 ;; Fields:
 PART0_STATUS				equ	  0x00 ;  0:  P0 status (0x00 = non-bootable, 0x80 = bootable)
@@ -30,10 +30,6 @@ FAT16_PART0_MEDIA_DESCRIPTOR		equ	  0xf8 ; media descriptor
 FAT16_PART0_SECTORS_PER_FAT		equ	0x0080 ; sectors per FAT
 FAT16_PART0_SECTORS_PER_TRACK		equ	0x003f ; sectors per track
 FAT16_PART0_HEADS			equ	0x0020 ; # of heads
-FAT16_PART0_HIDDEN_SECTORS_UW		equ	PART0_START_LBA_UW ; # of hidden sectors (UW) from MBR
-FAT16_PART0_HIDDEN_SECTORS_LW		equ	PART0_START_LBA_LW ; # of hidden sectors (LW) from MBR
-FAT16_PART0_SECTORS_UW			equ	PART0_SECTORS_UW ; # of sectors (UW) from MBR
-FAT16_PART0_SECTORS_LW			equ	PART0_SECTORS_LW ; # of sectors (LW) from MBR
 FAT16_PART0_LOGICAL_DRIVE_NUMBER	equ	0x0080 ; Logical drive number of partition
 FAT16_PART0_EXTENDED_SIGNATURE		equ	  0x29 ; Extended signature - must equal 0x29
 FAT16_PART0_PARTITION_SERIAL_NUM_UW	equ	0x4f30 ; Serial number of partition (B1)
@@ -2115,10 +2111,10 @@ boot_block:
 	dw      FAT16_PART0_SECTORS_PER_FAT
 	dw      FAT16_PART0_SECTORS_PER_TRACK
 	dw      FAT16_PART0_HEADS
-	dw      FAT16_PART0_HIDDEN_SECTORS_LW
-	dw      FAT16_PART0_HIDDEN_SECTORS_UW
-	dw      FAT16_PART0_SECTORS_LW
-	dw      FAT16_PART0_SECTORS_UW
+	dw      PART0_START_LBA_LW ; # of hidden sectors (LW) from MBR
+	dw      PART0_START_LBA_UW ; # of hidden sectors (UW) from MBR
+	dw      PART0_SECTORS_LW ; # of sectors (LW) from MBR
+	dw      PART0_SECTORS_UW ; # of sectors (UW) from MBR
 	dw      FAT16_PART0_LOGICAL_DRIVE_NUMBER
 	db      FAT16_PART0_EXTENDED_SIGNATURE
 	dw      FAT16_PART0_PARTITION_SERIAL_NUM_LW
