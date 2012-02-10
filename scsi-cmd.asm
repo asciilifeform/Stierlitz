@@ -149,10 +149,6 @@ SCSI_command_read_10:
     ;; now, rsplen = dwLen * 512
     mov    w[response_length_lw], r0
     mov    w[response_length_uw], r1
-    ;; TODO: error condition if the blocks to be read extend past end of "disk"
-    ;; for now, "doctor, it hurts when I do that! - so don't do that."
-    ;; TODO: find out if stock DD command does "it"...
-    ;; TODO: same goes for WRITE commands
     ret
 SCSI_command_write_6:
     jmp    scsi_cmd_not_implemented ;;;;;; NOT IMPLEMENTED YET ;;;;;;
@@ -277,11 +273,11 @@ SCSI_data_cmd_p_or_a_medium_rmvl: ;; nothing happens
     ret
 SCSI_data_cmd_read_capacity:
     ;; maximal block:
-    mov    b[(send_buffer)], 0x00 ;; ((MAXBLOCK >> 24) && 0xFF)
-    mov    b[(send_buffer + 1)], 0x20 ;; ((MAXBLOCK >> 16) && 0xFF)
-    mov    b[(send_buffer + 2)], 0x00 ;; ((MAXBLOCK >> 8) && 0xFF)
-    mov    b[(send_buffer + 3)], 0x00 ;; ((MAXBLOCK >> 0) && 0xFF)
-    ;; block size:
+    mov    b[(send_buffer)], MAXBLOCK_3
+    mov    b[(send_buffer + 1)], MAXBLOCK_2
+    mov    b[(send_buffer + 2)], MAXBLOCK_1
+    mov    b[(send_buffer + 3)], MAXBLOCK_0
+    ;; block size: (always 512)
     mov    b[(send_buffer + 4)], ((BLOCKSIZE >> 24) && 0xFF)
     mov    b[(send_buffer + 5)], ((BLOCKSIZE >> 16) && 0xFF)
     mov    b[(send_buffer + 6)], ((BLOCKSIZE >> 8) && 0xFF)
@@ -308,6 +304,7 @@ SCSI_data_cmd_read_10:
     mov    w[given_lba_uw], r4
     call   compute_actual_block_index	; compute corrected index
     ;; now load:
+    ;; TODO: error condition if the blocks to be read extend past end of "disk"
     call   load_lba_block ;; if (dwBufPos == 0) then read new block:
 @@: ; not new block: offset into block is calculated in handle_data_in
     ret

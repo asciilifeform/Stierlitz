@@ -26,7 +26,12 @@ FW_REV      		equ 	0x1       ; Firmware revision
 VENDOR_ID   		equ 	0x08EC    ; "M-Systems Flash Disk"
 PRODUCT_ID  		equ 	0x0020    ; "TravelDrive"
 
-MAXBLOCK		equ	2097152 ; 1GB; 8388608 for 4GB
+MAXBLOCK		equ	2097151 ; Index of last block (NOT block count!)
+;; Because QTASM is braindead:
+MAXBLOCK_3		equ	0x00
+MAXBLOCK_2		equ	0x1F
+MAXBLOCK_1		equ	0xFF
+MAXBLOCK_0		equ	0xFF
 
 USB_VER			equ     0x0110 ; 0x0110 for USB 1.1; 0x0200 for USB 2.0
 
