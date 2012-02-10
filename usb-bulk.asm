@@ -141,10 +141,10 @@ align 2
 ; r9 = dest, r8 = src, r1 = word count
 ;*****************************************************************************
 zap_send_buffer:
-    mov    r1, 0x0200
+    mov    r1, 0x0100
     mov    r9, send_buffer
 @@:
-    mov    b[r9++], 0x00
+    mov    w[r9++], 0x0000
     dec    r1
     jnz    @b
     ret
