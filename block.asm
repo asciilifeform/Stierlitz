@@ -83,20 +83,29 @@ zero_block: ; null
 ;*****************************************************************************
 ;; FAT16 Parts
 ;*****************************************************************************
+align 2
+part0_mbr_record_data:
+	db	PART0_STATUS
+	db	PART0_START_HEAD
+	db	PART0_START_SECT_76CYLHIGH
+	db	PART0_START_CYL
+	db	PART0_PARTITION_TYPE
+	db	PART0_END_HEAD
+	db	PART0_END_SECT_76CYLHIGH
+	db	PART0_END_CYL
+	dw	PART0_START_LBA_LW
+	dw	PART0_START_LBA_UW
+	dw	PART0_SECTORS_LW
+	dw	PART0_SECTORS_UW
+	PART0_MBR_RECORD_DATA_LEN equ ($-part0_mbr_record_data)
+;*****************************************************************************
+align 2
 build_fat16_mbr:
     call   zap_send_buffer
-    mov    b[PART0_STATUS_OFFSET], PART0_STATUS
-    mov    b[PART0_START_HEAD_OFFSET], PART0_START_HEAD
-    mov    b[PART0_START_SECT_76CYLHIGH_OFFSET], PART0_START_SECT_76CYLHIGH
-    mov    b[PART0_START_CYL_OFFSET], PART0_START_CYL
-    mov    b[PART0_PARTITION_TYPE_OFFSET], PART0_PARTITION_TYPE
-    mov    b[PART0_END_HEAD_OFFSET], PART0_END_HEAD
-    mov    b[PART0_END_SECT_76CYLHIGH_OFFSET], PART0_END_SECT_76CYLHIGH
-    mov    b[PART0_END_CYL_OFFSET], PART0_END_CYL
-    mov    w[PART0_START_LBA_UW_OFFSET], PART0_START_LBA_UW
-    mov    w[PART0_START_LBA_LW_OFFSET], PART0_START_LBA_LW
-    mov    w[PART0_SECTORS_UW_OFFSET], PART0_SECTORS_UW
-    mov    w[PART0_SECTORS_LW_OFFSET], PART0_SECTORS_LW
+    mov    r8, part0_mbr_record_data
+    mov    r9, PART0_MBR_RECORD_OFFSET
+    mov    r1, (PART0_MBR_RECORD_DATA_LEN >> 1) ; word count
+    call   mem_move
     mov    w[BOOT_SIGNATURE_OFFSET], BOOT_SIGNATURE
     ret
 ;*****************************************************************************
@@ -118,14 +127,50 @@ build_fat16_root_dir:
     mov    w[(send_buffer + 24)], 0x4046
     ret
 ;*****************************************************************************
+align 2
+boot_block_data:
+    	db	0xeb ; jmp
+	db	0x3c ; jmp
+	db	0x90 ; nop
+	db      'MSWIN4.0' ; OEM name (8 chars)
+	dw      FAT16_PART0_BYTES_PER_SECTOR
+	db      FAT16_PART0_SECTORS_PER_CLUSTER
+	dw      FAT16_PART0_RESERVED_SECTORS
+	db      FAT16_PART0_COPIES_OF_FAT
+	dw      FAT16_PART0_MAX_ROOT_DIR_ENTRIES
+	dw      FAT16_PART0_MAX_SECTS_IF_UNDR_32M
+	db      FAT16_PART0_MEDIA_DESCRIPTOR
+	dw      FAT16_PART0_SECTORS_PER_FAT
+	dw      FAT16_PART0_SECTORS_PER_TRACK
+	dw      FAT16_PART0_HEADS
+	dw      PART0_START_LBA_LW ; # of hidden sectors (LW) from MBR
+	dw      PART0_START_LBA_UW ; # of hidden sectors (UW) from MBR
+	dw      PART0_SECTORS_LW ; # of sectors (LW) from MBR
+	dw      PART0_SECTORS_UW ; # of sectors (UW) from MBR
+	dw      FAT16_PART0_LOGICAL_DRIVE_NUMBER
+	db      FAT16_PART0_EXTENDED_SIGNATURE
+	dw      FAT16_PART0_PARTITION_SERIAL_NUM_LW
+	dw      FAT16_PART0_PARTITION_SERIAL_NUM_UW
+	db	'STIERLITZ  ' ; Volume name of partition (11 chars)
+	db      'FAT16   ' ; FAT Name (must equal "FAT16   ")
+	BOOT_BLOCK_DATA_LEN equ ($-boot_block_data)
+;*****************************************************************************
+align 2
 build_fat16_boot_block:
-    mov    r8, boot_block
+    mov    r8, boot_block_data
     mov    r9, send_buffer
-    mov    r1, 0x0100 		; 256 words
-    call   mem_move 		; r9 = dest, r8 = src, r1 = word count
+    mov    r1, (BOOT_BLOCK_DATA_LEN >> 1) ; word count
+    call   mem_move
+    ;; fill remainder:
+    mov    r9, (send_buffer + BOOT_BLOCK_DATA_LEN) ; redundant?
+    mov    r1, (((BLOCKSIZE - BOOT_BLOCK_DATA_LEN) >> 1) - 1)
+@@:
+    mov    w[r9++], FAT16_BOOT_BLOCK_FILLER
+    dec    r1
+    jnz    @b
+    mov    w[BOOT_SIGNATURE_OFFSET], BOOT_SIGNATURE
     ret
 ;*****************************************************************************
-
 
 
 ;*****************************************************************************
