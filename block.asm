@@ -30,64 +30,102 @@ actual_lba_uw			dw 0x0000
 ;; Load LBA block
 ;*****************************************************************************
 load_lba_block:
+    ;; Check for Data Area range:
+
+    ;; ...
+
+    ;; else:
     ;; MBR?
     cmp    w[actual_lba_lw], MBR_BLOCK_LBA_LW
     jne    @f
     cmp    w[actual_lba_uw], MBR_BLOCK_LBA_UW
     jne    @f
-    mov    r8, mbr_block
-    jmp    load_block
+    ;; Build MBR
+    call   build_fat16_mbr
+    ret
 @@:
-    ;; block 10
-    cmp    w[actual_lba_lw], 10
-    jne    @f
-    cmp    w[actual_lba_uw], 0x0000
-    jne    @f
-    mov    r8, block_10
-    jmp    load_block
-@@:
-    ;; boot block - start of partition
+    ;; Boot Block - start of partition
     cmp    w[actual_lba_lw], FAT16_BOOT_BLOCK_LBA_LW
     jne    @f
     cmp    w[actual_lba_uw], FAT16_BOOT_BLOCK_LBA_UW
     jne    @f
-    mov    r8, boot_block
-    jmp    load_block
-@@:
+    call   build_fat16_boot_block
+    ret
+@@: ;; FAT itself.
     cmp    w[actual_lba_lw], FAT16_FAT_TABLES_BLOCK_LBA_LW
     jne    @f
     cmp    w[actual_lba_uw], FAT16_FAT_TABLES_BLOCK_LBA_UW
     jne    @f
-    mov    r8, fat_tables
-    jmp    load_block
-@@:
-    ;; block 192
-    cmp    w[actual_lba_lw], 192
+    ;; Or, Copy of FAT. Keep PC OS from whining...
+    cmp    w[actual_lba_lw], FAT16_FAT_TABLES_COPY_BLOCK_LBA_LW
     jne    @f
-    cmp    w[actual_lba_uw], 0x0000
+    cmp    w[actual_lba_uw], FAT16_FAT_TABLES_COPY_BLOCK_LBA_UW
     jne    @f
-    mov    r8, block_192
-    jmp    load_block
+    ;; Build FAT
+    call   build_fat16_fat
+    ret
 @@:
     ;; Root Directory Entries
     cmp    w[actual_lba_lw], FAT16_ROOT_DIRECTORY_ENTRY_LBA_LW
     jne    @f
     cmp    w[actual_lba_uw], FAT16_ROOT_DIRECTORY_ENTRY_LBA_UW
     jne    @f
-    mov    r8, root_dir_block
-    jmp    load_block
+    ;; Build Root Dir
+    call   build_fat16_root_dir
+    ret
 @@:
-    ;; default: zero
-    jmp    zero_block
-load_block:
+zero_block: ; null
+    call   zap_send_buffer
+    ret
+;*****************************************************************************
+
+
+;*****************************************************************************
+;; FAT16 Parts
+;*****************************************************************************
+build_fat16_mbr:
+    call   zap_send_buffer
+    mov    b[PART0_STATUS_OFFSET], PART0_STATUS
+    mov    b[PART0_START_HEAD_OFFSET], PART0_START_HEAD
+    mov    b[PART0_START_SECT_76CYLHIGH_OFFSET], PART0_START_SECT_76CYLHIGH
+    mov    b[PART0_START_CYL_OFFSET], PART0_START_CYL
+    mov    b[PART0_PARTITION_TYPE_OFFSET], PART0_PARTITION_TYPE
+    mov    b[PART0_END_HEAD_OFFSET], PART0_END_HEAD
+    mov    b[PART0_END_SECT_76CYLHIGH_OFFSET], PART0_END_SECT_76CYLHIGH
+    mov    b[PART0_END_CYL_OFFSET], PART0_END_CYL
+    mov    w[PART0_START_LBA_UW_OFFSET], PART0_START_LBA_UW
+    mov    w[PART0_START_LBA_LW_OFFSET], PART0_START_LBA_LW
+    mov    w[PART0_SECTORS_UW_OFFSET], PART0_SECTORS_UW
+    mov    w[PART0_SECTORS_LW_OFFSET], PART0_SECTORS_LW
+    mov    w[BOOT_SIGNATURE_OFFSET], BOOT_SIGNATURE
+    ret
+;*****************************************************************************
+build_fat16_fat:
+    call   zap_send_buffer
+    mov    w[send_buffer], 0xfff8
+    mov    w[(send_buffer + 2)], 0xffff
+    ret
+;*****************************************************************************
+build_fat16_root_dir:
+    call   zap_send_buffer
+    mov    w[send_buffer], 0x5355
+    mov    w[(send_buffer + 2)], 0x2042
+    mov    w[(send_buffer + 4)], 0x2020
+    mov    w[(send_buffer + 6)], 0x2020
+    mov    w[(send_buffer + 8)], 0x2020
+    mov    w[(send_buffer + 10)], 0x0820
+    mov    w[(send_buffer + 22)], 0xba27
+    mov    w[(send_buffer + 24)], 0x4046
+    ret
+;*****************************************************************************
+build_fat16_boot_block:
+    mov    r8, boot_block
     mov    r9, send_buffer
     mov    r1, 0x0100 		; 256 words
     call   mem_move 		; r9 = dest, r8 = src, r1 = word count
     ret
-zero_block:
-    call   zap_send_buffer
-    ret
 ;*****************************************************************************
+
 
 
 ;*****************************************************************************
