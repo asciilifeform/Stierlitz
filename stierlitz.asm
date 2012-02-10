@@ -136,7 +136,7 @@ include scsi-cmd.asm
 include block.asm
 include scsi-state.asm
 include descriptor.asm
-include clean1gb.asm
+include fat16.asm
 ;*****************************************************************************
 ;; Buffers
 align 2

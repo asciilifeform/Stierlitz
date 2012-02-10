@@ -1,5 +1,29 @@
-;; Block no. 0
-block_0:
+BOOT_SIGNATURE			equ	0xaa55
+
+;; Partition Record
+PART0_RECORD_OFFSET		equ     0x01BE
+;; Fields:
+PART0_STATUS			equ	0x00 ;  0:  P0 status (0x00 = non-bootable, 0x80 = bootable)
+PART0_START_HEAD		equ	0x01 ;  1: Start CHS: Head
+PART0_START_SECT_76CYLHIGH	equ	0x01 ;  2: Start CHS: Sector in bits 5..0; bits 7..6 are high bits of Cylinder
+PART0_START_CYL			equ	0x00 ;  3: Start CHS: Bits 7..0 of Cylinder
+PART0_PARTITION_TYPE		equ	0x0e ;  4: Partition Type
+PART0_END_HEAD			equ	0x1f ;  5: Ending CHS: Head
+PART0_END_SECT_76CYLHIGH	equ	0xff ;  6: Ending CHS: Sector in bits 5..0; bits 7..6 are high bits of Cylinder
+PART0_END_CYL			equ	0xff ;  7: Ending CHS: Bits 7..0 of Cylinder
+PART0_START_LBA_0		equ	0x3f ;  8: Starting LBA: Byte 0
+PART0_START_LBA_1		equ	0x00 ;  9: Starting LBA: Byte 1
+PART0_START_LBA_2		equ	0x00 ; 10: Starting LBA: Byte 2
+PART0_START_LBA_3		equ	0x00 ; 11: Starting LBA: Byte 3
+PART0_SECTORS_0			equ	0xc1 ; 12: Size in sectors
+PART0_SECTORS_1			equ	0xfd ; 13: Size in sectors
+PART0_SECTORS_2			equ	0x1f ; 14: Size in sectors
+PART0_SECTORS_3			equ	0x00 ; 15: Size in sectors
+
+;*****************************************************************************
+;; Block no. 0: superblock
+;*****************************************************************************
+mbr_block:
 	db	0xfa
 	db	0x33
 	db	0xc0
@@ -446,24 +470,22 @@ block_0:
 	db	0x00
 	db	0x00
 	db	0x00
-	db	0x00
-	db	0x01
-	db	0x01
-	db	0x00
-	db	0x0e
-	db	0x1f
-	db	0xff
-	db	0xff
-	db	0x3f
-	db	0x00
-	db	0x00
-	db	0x00
-	db	0xc1
-	db	0xfd
-	db	0x1f
-	db	0x00
-	db	0x00
-	db	0x00
+	db	PART0_STATUS
+	db	PART0_START_HEAD
+	db	PART0_START_SECT_76CYLHIGH
+	db	PART0_START_CYL
+	db	PART0_PARTITION_TYPE
+	db	PART0_END_HEAD
+	db	PART0_END_SECT_76CYLHIGH
+	db	PART0_END_CYL
+	db	PART0_START_LBA_0
+	db	PART0_START_LBA_1
+	db	PART0_START_LBA_2
+	db	PART0_START_LBA_3
+	db	PART0_SECTORS_0
+	db	PART0_SECTORS_1
+	db	PART0_SECTORS_2
+	db	PART0_SECTORS_3
 	db	0x00
 	db	0x00
 	db	0x00
@@ -510,8 +532,13 @@ block_0:
 	db	0x00
 	db	0x00
 	db	0x00
-	db	0x55
-	db	0xaa
+	db	0x00
+	db	0x00
+	dw	BOOT_SIGNATURE
+;*****************************************************************************
+
+
+
 ;; Block no. 10
 block_10:
 	db	0x00
@@ -2054,70 +2081,47 @@ block_320:
 	db	0x00
 	db	0x00
 	db	0x00
-;; Block no. 63
-block_63:
-	db	0xeb
-	db	0x3c
-	db	0x90
-	db	0x4d
-	db	0x53
-	db	0x57
-	db	0x49
-	db	0x4e
-	db	0x34
-	db	0x2e
-	db	0x30
-	db	0x00
-	db	0x02
-	db	0x40
-	db	0x01
-	db	0x00
-	db	0x02
-	db	0x00
-	db	0x02
-	db	0x00
-	db	0x00
-	db	0xf8
-	db	0x80
-	db	0x00
-	db	0x3f
-	db	0x00
-	db	0x20
-	db	0x00
-	db	0x3f
-	db	0x00
-	db	0x00
-	db	0x00
-	db	0xc1
-	db	0xfd
-	db	0x1f
-	db	0x00
-	db	0x80
-	db	0x00
-	db	0x29
-	db	0x7b
-	db	0x5f
-	db	0x30
-	db	0x4f
-	db	0x55
-	db	0x53
-	db	0x42
-	db	0x20
-	db	0x20
-	db	0x20
-	db	0x20
-	db	0x20
-	db	0x20
-	db	0x20
-	db	0x20
-	db	0x46
-	db	0x41
-	db	0x54
-	db	0x31
-	db	0x36
-	db	0x20
-	db	0x20
-	db	0x20
+
+;*****************************************************************************
+boot_block:
+	db	0xeb ; jmp
+	db	0x3c ; jmp
+	db	0x90 ; nop
+	db      'MSWIN4.0' ; OEM name (8 chars)
+	db	0x00 ; Bytes per sector (low)
+	db	0x02 ; Bytes per sector (high)
+	db	0x40 ; Sectors per cluster
+	db	0x01 ; Reserved sectors (low)
+	db	0x00 ; Reserved sectors (high)
+	db	0x02 ; # of copies of FAT
+	db	0x00 ; Max root dir entries (low)
+	db	0x02 ; Max root dir entries (high)
+	db	0x00 ; # of sectors in part < 32MB (low)
+	db	0x00 ; # of sectors in part < 32MB (high)
+	db	0xf8 ; media descriptor
+	db	0x80 ; sectors per FAT (low)
+	db	0x00 ; sectors per FAT (high)
+	db	0x3f ; sectors per track (low)
+	db	0x00 ; sectors per track (high)
+	db	0x20 ; # of heads (low)
+	db	0x00 ; # of heads (high)
+	db	0x3f ; # of hidden sectors (B0)
+	db	0x00 ; # of hidden sectors (B1)
+	db	0x00 ; # of hidden sectors (B2)
+	db	0x00 ; # of hidden sectors (B3)
+	db	0xc1 ; # of sectors (B0)
+	db	0xfd ; # of sectors (B1)
+	db	0x1f ; # of sectors (B2)
+	db	0x00 ; # of sectors (B3)
+	db	0x80 ; Logical drive number of partition (low)
+	db	0x00 ; Logical drive number of partition (high)
+	db	0x29 ; Extended signature - must equal 0x29
+	db	0x7b ; Serial number of partition (B0)
+	db	0x5f ; Serial number of partition (B1)
+	db	0x30 ; Serial number of partition (B2)
+	db	0x4f ; Serial number of partition (B3)
+	db	'USB        '	; Volume name of partition (11 chars)
+	db      'FAT16   '	; FAT Name (must equal "FAT16   ")
 	db	0xf6
 	db	0xf6
 	db	0xf6
@@ -2566,8 +2570,11 @@ block_63:
 	db	0xf6
 	db	0xf6
 	db	0xf6
-	db	0x55
-	db	0xaa
+	dw	BOOT_SIGNATURE
+;*****************************************************************************
+
+	
+
 ;; Block no. 64
 block_64:
 	db	0xf8

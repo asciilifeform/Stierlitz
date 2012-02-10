@@ -30,12 +30,12 @@ actual_lba_uw			dw 0x0000
 ;; Load LBA block
 ;*****************************************************************************
 load_lba_block:
-    ;; block 0
+    ;; MBR?
     cmp    w[actual_lba_lw], 0x0000
     jne    @f
     cmp    w[actual_lba_uw], 0x0000
     jne    @f
-    mov    r8, block_0
+    mov    r8, mbr_block
     jmp    load_block
 @@:
     ;; block 10
@@ -46,12 +46,12 @@ load_lba_block:
     mov    r8, block_10
     jmp    load_block
 @@:
-    ;; block 63
+    ;; boot block
     cmp    w[actual_lba_lw], 63
     jne    @f
     cmp    w[actual_lba_uw], 0x0000
     jne    @f
-    mov    r8, block_63
+    mov    r8, boot_block
     jmp    load_block
 @@:
     ;; block 64
