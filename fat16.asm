@@ -1,24 +1,24 @@
-BOOT_SIGNATURE			equ	0xaa55
+BOOT_SIGNATURE				equ	0xaa55
 
 ;; Partition Record
-PART0_RECORD_OFFSET		equ     0x01BE
+PART0_RECORD_OFFSET			equ     0x01BE
 ;; Fields:
-PART0_STATUS			equ	  0x00 ;  0:  P0 status (0x00 = non-bootable, 0x80 = bootable)
-PART0_START_HEAD		equ	  0x01 ;  1: Start CHS: Head
-PART0_START_SECT_76CYLHIGH	equ	  0x01 ;  2: Start CHS: Sector in bits 5..0; bits 7..6 are high bits of Cylinder
-PART0_START_CYL			equ	  0x00 ;  3: Start CHS: Bits 7..0 of Cylinder
-PART0_PARTITION_TYPE		equ	  0x0e ;  4: Partition Type
-PART0_END_HEAD			equ	  0x1f ;  5: Ending CHS: Head
-PART0_END_SECT_76CYLHIGH	equ	  0xff ;  6: Ending CHS: Sector in bits 5..0; bits 7..6 are high bits of Cylinder
-PART0_END_CYL			equ	  0xff ;  7: Ending CHS: Bits 7..0 of Cylinder
-PART0_START_LBA_UW		equ	0x0000 ; 11: Starting LBA: Byte 3
-PART0_START_LBA_LW		equ	0x003f ;  8: Starting LBA: Byte 0
-PART0_SECTORS_LW		equ	0xfdc1 ; 12: Size in sectors
-PART0_SECTORS_UW		equ	0x001f ; 14: Size in sectors
+PART0_STATUS				equ	  0x00 ;  0:  P0 status (0x00 = non-bootable, 0x80 = bootable)
+PART0_START_HEAD			equ	  0x01 ;  1: Start CHS: Head
+PART0_START_SECT_76CYLHIGH		equ	  0x01 ;  2: Start CHS: Sector in bits 5..0; bits 7..6 are high bits of Cylinder
+PART0_START_CYL				equ	  0x00 ;  3: Start CHS: Bits 7..0 of Cylinder
+PART0_PARTITION_TYPE			equ	  0x0e ;  4: Partition Type
+PART0_END_HEAD				equ	  0x1f ;  5: Ending CHS: Head
+PART0_END_SECT_76CYLHIGH		equ	  0xff ;  6: Ending CHS: Sector in bits 5..0; bits 7..6 are high bits of Cylinder
+PART0_END_CYL				equ	  0xff ;  7: Ending CHS: Bits 7..0 of Cylinder
+PART0_START_LBA_UW			equ	0x0000 ; 11: Starting LBA: Byte 3
+PART0_START_LBA_LW			equ	0x003f ;  8: Starting LBA: Byte 0
+PART0_SECTORS_LW			equ	0xfdc1 ; 12: Size in sectors
+PART0_SECTORS_UW			equ	0x001f ; 14: Size in sectors
 
 ;; Our partition parameters
 FAT16_PART0_BYTES_PER_SECTOR		equ	0x0200 ; Bytes per sector
-FAT16_PART0_SECTORS_PER_CLUSTER	equ	  0x40 ; Sectors per cluster
+FAT16_PART0_SECTORS_PER_CLUSTER		equ	  0x40 ; Sectors per cluster
 FAT16_PART0_RESERVED_SECTORS		equ	0x0001 ; Reserved sectors
 FAT16_PART0_COPIES_OF_FAT		equ	  0x02 ; # of copies of FAT
 FAT16_PART0_MAX_ROOT_DIR_ENTRIES	equ	0x0200 ; Max root dir entries
@@ -29,10 +29,10 @@ FAT16_PART0_SECTORS_PER_TRACK		equ	0x003f ; sectors per track
 FAT16_PART0_HEADS			equ	0x0020 ; # of heads
 FAT16_PART0_HIDDEN_SECTORS_UW		equ	0x0000 ; # of hidden sectors (UW)
 FAT16_PART0_HIDDEN_SECTORS_LW		equ	0x003f ; # of hidden sectors (LW)
-FAT16_PART0_SECTORS_UW		equ	0x001f ; # of sectors (UW)
-FAT16_PART0_SECTORS_LW		equ	0xfdc1 ; # of sectors (LW)
+FAT16_PART0_SECTORS_UW			equ	0x001f ; # of sectors (UW)
+FAT16_PART0_SECTORS_LW			equ	0xfdc1 ; # of sectors (LW)
 FAT16_PART0_LOGICAL_DRIVE_NUMBER	equ	0x0080 ; Logical drive number of partition
-FAT16_PART0_EXTENDED_SIGNATURE	equ	  0x29 ; Extended signature - must equal 0x29
+FAT16_PART0_EXTENDED_SIGNATURE		equ	  0x29 ; Extended signature - must equal 0x29
 FAT16_PART0_PARTITION_SERIAL_NUM_UW	equ	0x4f30 ; Serial number of partition (B1)
 FAT16_PART0_PARTITION_SERIAL_NUM_LW	equ	0x5f7b ; Serial number of partition (B0)
 
