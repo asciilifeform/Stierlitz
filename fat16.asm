@@ -1,10 +1,30 @@
 ;*****************************************************************************
-;; Partition Data
+;; Derived partition constants
+;*****************************************************************************
+MBR_BLOCK_LBA_UW			equ     0x0000
+MBR_BLOCK_LBA_LW			equ     0x0000
+FAT16_BOOT_BLOCK_LBA_UW			equ	PART0_START_LBA_UW
+FAT16_BOOT_BLOCK_LBA_LW			equ	PART0_START_LBA_LW
+FAT16_FAT_TABLES_BLOCK_LBA_UW		equ	0x0000 ; Forget about upper word... Because QTASM is retarded.
+FAT16_FAT_TABLES_BLOCK_LBA_LW		equ	((FAT16_BOOT_BLOCK_LBA_LW) + 1)
+FAT16_ROOT_DIRECTORY_ENTRY_LBA_UW	equ     0x0000
+FAT16_ROOT_DIRECTORY_ENTRY_LBA_LW	equ     (FAT16_FAT_TABLES_BLOCK_LBA_LW + ((FAT16_PART0_SECTORS_PER_FAT) * 2))
+;*****************************************************************************
+
+
+;*****************************************************************************
+;; Partition Format
 ;*****************************************************************************
 BOOT_SIGNATURE				equ	0xaa55
 
 ;; Partition Record in MBR
 PART0_RECORD_OFFSET			equ     0x01BE
+;*****************************************************************************
+
+
+;*****************************************************************************
+;; Partition Data
+;*****************************************************************************
 ;; Fields:
 PART0_STATUS				equ	  0x00 ;  0:  P0 status (0x00 = non-bootable, 0x80 = bootable)
 PART0_START_HEAD			equ	  0x01 ;  1: Start CHS: Head
@@ -14,8 +34,8 @@ PART0_PARTITION_TYPE			equ	  0x0e ;  4: Partition Type
 PART0_END_HEAD				equ	  0x1f ;  5: Ending CHS: Head
 PART0_END_SECT_76CYLHIGH		equ	  0xff ;  6: Ending CHS: Sector in bits 5..0; bits 7..6 are high bits of Cylinder
 PART0_END_CYL				equ	  0xff ;  7: Ending CHS: Bits 7..0 of Cylinder
-PART0_START_LBA_UW			equ	0x0000 ; 11: Starting LBA: Byte 3
-PART0_START_LBA_LW			equ	0x003f ;  8: Starting LBA: Byte 0
+PART0_START_LBA_UW			equ	0x0000 ; 11: Starting LBA: Upper Word
+PART0_START_LBA_LW			equ	0x003f ;  8: Starting LBA: Lower Word
 PART0_SECTORS_UW			equ	0x001f ; 14: Size in sectors
 PART0_SECTORS_LW			equ	0xfdc1 ; 12: Size in sectors
 
@@ -34,7 +54,6 @@ FAT16_PART0_LOGICAL_DRIVE_NUMBER	equ	0x0080 ; Logical drive number of partition
 FAT16_PART0_EXTENDED_SIGNATURE		equ	  0x29 ; Extended signature - must equal 0x29
 FAT16_PART0_PARTITION_SERIAL_NUM_UW	equ	0x4f30 ; Serial number of partition (B1)
 FAT16_PART0_PARTITION_SERIAL_NUM_LW	equ	0x5f7b ; Serial number of partition (B0)
-;*****************************************************************************
 
 
 ;*****************************************************************************
@@ -1580,8 +1599,8 @@ block_192:
 	db	0x00
 	db	0x00
 	db	0x00
-;; Block no. 320
-block_320:
+
+root_dir_block:
 	db	0x55
 	db	0x53
 	db	0x42
@@ -2119,8 +2138,8 @@ boot_block:
 	db      FAT16_PART0_EXTENDED_SIGNATURE
 	dw      FAT16_PART0_PARTITION_SERIAL_NUM_LW
 	dw      FAT16_PART0_PARTITION_SERIAL_NUM_UW
-	db	'USB        '	; Volume name of partition (11 chars)
-	db      'FAT16   '	; FAT Name (must equal "FAT16   ")
+	db	'STIERLITZ  ' ; Volume name of partition (11 chars)
+	db      'FAT16   ' ; FAT Name (must equal "FAT16   ")
 	db	0xf6
 	db	0xf6
 	db	0xf6
@@ -2574,8 +2593,7 @@ boot_block:
 
 	
 
-;; Block no. 64
-block_64:
+fat_tables:
 	db	0xf8
 	db	0xff
 	db	0xff

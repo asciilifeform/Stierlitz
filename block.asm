@@ -31,9 +31,9 @@ actual_lba_uw			dw 0x0000
 ;*****************************************************************************
 load_lba_block:
     ;; MBR?
-    cmp    w[actual_lba_lw], 0x0000
+    cmp    w[actual_lba_lw], MBR_BLOCK_LBA_LW
     jne    @f
-    cmp    w[actual_lba_uw], 0x0000
+    cmp    w[actual_lba_uw], MBR_BLOCK_LBA_UW
     jne    @f
     mov    r8, mbr_block
     jmp    load_block
@@ -47,19 +47,18 @@ load_lba_block:
     jmp    load_block
 @@:
     ;; boot block - start of partition
-    cmp    w[actual_lba_lw], 63
+    cmp    w[actual_lba_lw], FAT16_BOOT_BLOCK_LBA_LW
     jne    @f
-    cmp    w[actual_lba_uw], 0x0000
+    cmp    w[actual_lba_uw], FAT16_BOOT_BLOCK_LBA_UW
     jne    @f
     mov    r8, boot_block
     jmp    load_block
 @@:
-    ;; block 64
-    cmp    w[actual_lba_lw], 64
+    cmp    w[actual_lba_lw], FAT16_FAT_TABLES_BLOCK_LBA_LW
     jne    @f
-    cmp    w[actual_lba_uw], 0x0000
+    cmp    w[actual_lba_uw], FAT16_FAT_TABLES_BLOCK_LBA_UW
     jne    @f
-    mov    r8, block_64
+    mov    r8, fat_tables
     jmp    load_block
 @@:
     ;; block 192
@@ -70,12 +69,12 @@ load_lba_block:
     mov    r8, block_192
     jmp    load_block
 @@:
-    ;; block 320
-    cmp    w[actual_lba_lw], 320
+    ;; Root Directory Entries
+    cmp    w[actual_lba_lw], FAT16_ROOT_DIRECTORY_ENTRY_LBA_LW
     jne    @f
-    cmp    w[actual_lba_uw], 0x0000
+    cmp    w[actual_lba_uw], FAT16_ROOT_DIRECTORY_ENTRY_LBA_UW
     jne    @f
-    mov    r8, block_320
+    mov    r8, root_dir_block
     jmp    load_block
 @@:
     ;; default: zero
