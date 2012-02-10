@@ -20,6 +20,32 @@ PART0_SECTORS_1			equ	0xfd ; 13: Size in sectors
 PART0_SECTORS_2			equ	0x1f ; 14: Size in sectors
 PART0_SECTORS_3			equ	0x00 ; 15: Size in sectors
 
+;; Our partition parameters
+FAT16_BYTES_PER_SECTOR		equ	0x0200 ; Bytes per sector
+FAT16_SECTORS_PER_CLUSTER	equ	  0x40 ; Sectors per cluster
+FAT16_RESERVED_SECTORS		equ	0x0001 ; Reserved sectors
+FAT16_COPIES_OF_FAT		equ	  0x02 ; # of copies of FAT
+FAT16_MAX_ROOT_DIR_ENTRIES	equ	0x0200 ; Max root dir entries
+FAT16_MAX_SECTS_IF_UNDR_32M	equ	0x0000 ; # of sectors in part < 32MB
+FAT16_MEDIA_DESCRIPTOR		equ	  0xf8 ; media descriptor
+FAT16_SECTORS_PER_FAT		equ	0x0080 ; sectors per FAT
+FAT16_SECTORS_PER_TRACK		equ	0x003f ; sectors per track
+FAT16_HEADS			equ	0x0020 ; # of heads
+FAT16_HIDDEN_SECTORS_0		equ	  0x3f ; # of hidden sectors (B0)
+FAT16_HIDDEN_SECTORS_1		equ	  0x00 ; # of hidden sectors (B1)
+FAT16_HIDDEN_SECTORS_2		equ	  0x00 ; # of hidden sectors (B2)
+FAT16_HIDDEN_SECTORS_3		equ	  0x00 ; # of hidden sectors (B3)
+FAT16_SECTORS_0			equ	  0xc1 ; # of sectors (B0)
+FAT16_SECTORS_1			equ	  0xfd ; # of sectors (B1)
+FAT16_SECTORS_2			equ	  0x1f ; # of sectors (B2)
+FAT16_SECTORS_3			equ	  0x00 ; # of sectors (B3)
+FAT16_LOGICAL_DRIVE_NUMBER	equ	0x0080 ; Logical drive number of partition
+FAT16_EXTENDED_SIGNATURE	equ	  0x29 ; Extended signature - must equal 0x29
+FAT16_PARTITION_SERIAL_NUM_B0	equ	  0x7b ; Serial number of partition (B0)
+FAT16_PARTITION_SERIAL_NUM_B1	equ	  0x5f ; Serial number of partition (B1)
+FAT16_PARTITION_SERIAL_NUM_B2	equ	  0x30 ; Serial number of partition (B2)
+FAT16_PARTITION_SERIAL_NUM_B3	equ	  0x4f ; Serial number of partition (B3)
+
 ;*****************************************************************************
 ;; Block no. 0: superblock
 ;*****************************************************************************
@@ -2088,38 +2114,33 @@ boot_block:
 	db	0x3c ; jmp
 	db	0x90 ; nop
 	db      'MSWIN4.0' ; OEM name (8 chars)
-	db	0x00 ; Bytes per sector (low)
-	db	0x02 ; Bytes per sector (high)
-	db	0x40 ; Sectors per cluster
-	db	0x01 ; Reserved sectors (low)
-	db	0x00 ; Reserved sectors (high)
-	db	0x02 ; # of copies of FAT
-	db	0x00 ; Max root dir entries (low)
-	db	0x02 ; Max root dir entries (high)
-	db	0x00 ; # of sectors in part < 32MB (low)
-	db	0x00 ; # of sectors in part < 32MB (high)
-	db	0xf8 ; media descriptor
-	db	0x80 ; sectors per FAT (low)
-	db	0x00 ; sectors per FAT (high)
-	db	0x3f ; sectors per track (low)
-	db	0x00 ; sectors per track (high)
-	db	0x20 ; # of heads (low)
-	db	0x00 ; # of heads (high)
-	db	0x3f ; # of hidden sectors (B0)
-	db	0x00 ; # of hidden sectors (B1)
-	db	0x00 ; # of hidden sectors (B2)
-	db	0x00 ; # of hidden sectors (B3)
-	db	0xc1 ; # of sectors (B0)
-	db	0xfd ; # of sectors (B1)
-	db	0x1f ; # of sectors (B2)
-	db	0x00 ; # of sectors (B3)
-	db	0x80 ; Logical drive number of partition (low)
-	db	0x00 ; Logical drive number of partition (high)
-	db	0x29 ; Extended signature - must equal 0x29
-	db	0x7b ; Serial number of partition (B0)
-	db	0x5f ; Serial number of partition (B1)
-	db	0x30 ; Serial number of partition (B2)
-	db	0x4f ; Serial number of partition (B3)
+
+	dw      FAT16_BYTES_PER_SECTOR
+	db      FAT16_SECTORS_PER_CLUSTER
+	dw      FAT16_RESERVED_SECTORS
+	db      FAT16_COPIES_OF_FAT
+	dw      FAT16_MAX_ROOT_DIR_ENTRIES
+	dw      FAT16_MAX_SECTS_IF_UNDR_32M
+	db      FAT16_MEDIA_DESCRIPTOR
+	dw      FAT16_SECTORS_PER_FAT
+	dw      FAT16_SECTORS_PER_TRACK
+	dw      FAT16_HEADS
+	db      FAT16_HIDDEN_SECTORS_0
+	db      FAT16_HIDDEN_SECTORS_1
+	db      FAT16_HIDDEN_SECTORS_2
+	db      FAT16_HIDDEN_SECTORS_3
+	db      FAT16_SECTORS_0
+	db      FAT16_SECTORS_1
+	db      FAT16_SECTORS_2
+	db      FAT16_SECTORS_3
+	dw      FAT16_LOGICAL_DRIVE_NUMBER
+	db      FAT16_EXTENDED_SIGNATURE
+	db      FAT16_PARTITION_SERIAL_NUM_B0
+	db      FAT16_PARTITION_SERIAL_NUM_B1
+	db      FAT16_PARTITION_SERIAL_NUM_B2
+	db      FAT16_PARTITION_SERIAL_NUM_B3
+
+
 	db	'USB        '	; Volume name of partition (11 chars)
 	db      'FAT16   '	; FAT Name (must equal "FAT16   ")
 	db	0xf6

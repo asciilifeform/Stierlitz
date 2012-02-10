@@ -46,7 +46,7 @@ load_lba_block:
     mov    r8, block_10
     jmp    load_block
 @@:
-    ;; boot block
+    ;; boot block - start of partition
     cmp    w[actual_lba_lw], 63
     jne    @f
     cmp    w[actual_lba_uw], 0x0000
