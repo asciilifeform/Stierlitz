@@ -81,7 +81,7 @@ zero_block: ; null
 
 
 ;*****************************************************************************
-;; FAT16 Parts
+;; FAT16 MBR
 ;*****************************************************************************
 align 2
 part0_mbr_record_data:
@@ -109,23 +109,61 @@ build_fat16_mbr:
     mov    w[BOOT_SIGNATURE_OFFSET], BOOT_SIGNATURE
     ret
 ;*****************************************************************************
+
+
+;*****************************************************************************
+;; FAT16 FAT
+;*****************************************************************************
+align 2
+fat16_fat_data:
+        dw	0xfff8
+	dw	0xffff
+	FAT16_FAT_DATA_LEN equ ($-fat16_fat_data)
+;*****************************************************************************
+align 2
 build_fat16_fat:
     call   zap_send_buffer
-    mov    w[send_buffer], 0xfff8
-    mov    w[(send_buffer + 2)], 0xffff
+    mov    r8, fat16_fat_data
+    mov    r9, send_buffer
+    mov    r1, (FAT16_FAT_DATA_LEN >> 1) ; word count
+    call   mem_move
     ret
 ;*****************************************************************************
+
+
+;*****************************************************************************
+;; FAT16 Root Directory
+;*****************************************************************************
+align 2
+fat16_root_dir_data:
+    	dw	0x5355
+	dw	0x2042
+	dw	0x2020
+	dw	0x2020
+	dw	0x2020
+	dw	0x0820
+	dw	0x0000
+	dw	0x0000
+	dw	0x0000
+	dw	0x0000
+	dw	0x0000
+	dw	0xba27
+	dw	0x4046
+	FAT16_ROOT_DIR_DATA_LEN equ ($-fat16_root_dir_data)
+;*****************************************************************************
+align 2
 build_fat16_root_dir:
     call   zap_send_buffer
-    mov    w[send_buffer], 0x5355
-    mov    w[(send_buffer + 2)], 0x2042
-    mov    w[(send_buffer + 4)], 0x2020
-    mov    w[(send_buffer + 6)], 0x2020
-    mov    w[(send_buffer + 8)], 0x2020
-    mov    w[(send_buffer + 10)], 0x0820
-    mov    w[(send_buffer + 22)], 0xba27
-    mov    w[(send_buffer + 24)], 0x4046
+    mov    r8, fat16_root_dir_data
+    mov    r9, send_buffer
+    mov    r1, (FAT16_ROOT_DIR_DATA_LEN >> 1) ; word count
+    call   mem_move
     ret
+;*****************************************************************************
+
+
+;*****************************************************************************
+;; FAT16 Boot Block
 ;*****************************************************************************
 align 2
 boot_block_data:
