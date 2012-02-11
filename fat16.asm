@@ -3,6 +3,11 @@
 ;*****************************************************************************
 FILE_SIZE_LW		equ	0x0000
 FILE_SIZE_UW		equ	0x0010
+
+;; QTASM is Retarded...:
+FILE_SIZE_IN_BLKS_LW	equ	0x0800
+FILE_SIZE_IN_BLKS_UW	equ	0x0000
+
 FAKE_FILE_CLUSTERS	equ	32 ; 1 meg
 ;*****************************************************************************
 

@@ -30,33 +30,34 @@ actual_lba_uw			dw 0x0000
 ;; Load LBA block
 ;*****************************************************************************
 ;; watch out for carry (unhandled because QTASM is RETARDED ...)
-FILE_TOP_LW	equ	(FAT16_DATA_AREA_LBA_LW_EFFECTIVE_BOTTOM + FILE_SIZE_LW)
-FILE_TOP_UW	equ	(FAT16_DATA_AREA_LBA_UW_EFFECTIVE_BOTTOM + FILE_SIZE_UW)
+FILE_TOP_LW	equ	(FAT16_DATA_AREA_LBA_LW_EFFECTIVE_BOTTOM + FILE_SIZE_IN_BLKS_LW)
+FILE_TOP_UW	equ	(FAT16_DATA_AREA_LBA_UW_EFFECTIVE_BOTTOM + FILE_SIZE_IN_BLKS_UW)
 ;*****************************************************************************
 load_lba_block:
-    ;; Check for Data Area range:
-    ;; check if below:
+    ;; check if below Data Area range:
     cmp    w[actual_lba_uw], 0x0000
     jne    @f ; if upper word of LBA != 0, then definitely NOT below range...
     cmp    w[actual_lba_lw], FAT16_DATA_AREA_LBA_LW_EFFECTIVE_BOTTOM
     jb     not_meat ; below range
-@@:
-    ;; Forget about checking upper bound, since we have just one file.
-    ;; In data range:
+@@: ; not below range:
     mov    r0, w[actual_lba_lw]
-    mov    r3, w[actual_lba_uw]
+    mov    r1, w[actual_lba_uw]
+    mov    r2, FILE_TOP_LW
+    mov    r3, FILE_TOP_UW
+    call   subtract_16 ;; R1:R0 - R3:R2
+    jnc    not_meat    ; above top of range
+    ;; Otherwise... WE HAVE A WINNER!
+    mov    r0, w[actual_lba_lw]
+    mov    r1, w[actual_lba_uw]
     mov    r2, FAT16_DATA_AREA_LBA_LW_EFFECTIVE_BOTTOM
     mov    r3, FAT16_DATA_AREA_LBA_UW_EFFECTIVE_BOTTOM
     call   subtract_16 ;; R1:R0 - R3:R2
-    ;; WE HAVE A WINNER!
     mov    w[physical_lba_lw], r0
     mov    w[physical_lba_uw], r3
     call   load_physical_lba_block
     ret
-not_meat:
-    ;; ...
-    ;; else:
-    ;; MBR?
+not_meat: ;; else, what could it be?
+    ;; MBR:
     cmp    w[actual_lba_lw], MBR_BLOCK_LBA_LW
     jne    @f
     cmp    w[actual_lba_uw], MBR_BLOCK_LBA_UW
@@ -64,14 +65,14 @@ not_meat:
     ;; Build MBR
     call   build_fat16_mbr
     ret
-    ;; Boot Block - start of partition
+    ;; Boot Block - start of partition:
 @@: cmp    w[actual_lba_lw], FAT16_BOOT_BLOCK_LBA_LW
     jne    @f
     cmp    w[actual_lba_uw], FAT16_BOOT_BLOCK_LBA_UW
     jne    @f
     call   build_fat16_boot_block
     ret
-    ;; FAT itself.
+    ;; FAT itself:
 @@: cmp    w[actual_lba_lw], FAT16_FAT_TABLES_BLOCK_LBA_LW
     jne    @f
     cmp    w[actual_lba_uw], FAT16_FAT_TABLES_BLOCK_LBA_UW
@@ -85,7 +86,7 @@ not_meat:
     jne    @f
     call   build_fat16_fat ;; Build FAT
     ret
-    ;; Root Directory Entries
+    ;; Root Directory Entries:
 @@: cmp    w[actual_lba_lw], FAT16_ROOT_DIRECTORY_ENTRY_LBA_LW
     jne    @f
     cmp    w[actual_lba_uw], FAT16_ROOT_DIRECTORY_ENTRY_LBA_UW
@@ -93,7 +94,7 @@ not_meat:
     ;; Build Root Dir
     call   build_fat16_root_dir
     ret
-zero_block: ; null
+zero_block: ; default - null block:
 @@: call   zap_send_buffer
     ret
 ;*****************************************************************************
