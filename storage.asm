@@ -23,7 +23,7 @@
 ;;;; SCSI
 ;*****************************************************************************
 
-BLOCKSIZE			equ	512
+BLOCKSIZE			equ	0x0200 ; 512
 
 ;; SBC2 mandatory SCSI commands
 SCSI_CMD_FORMAT_UNIT		equ	0x04

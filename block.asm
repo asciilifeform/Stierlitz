@@ -31,9 +31,7 @@ actual_lba_uw			dw 0x0000
 ;*****************************************************************************
 load_lba_block:
     ;; Check for Data Area range:
-
     ;; ...
-
     ;; else:
     ;; MBR?
     cmp    w[actual_lba_lw], MBR_BLOCK_LBA_LW
@@ -43,39 +41,37 @@ load_lba_block:
     ;; Build MBR
     call   build_fat16_mbr
     ret
-@@:
     ;; Boot Block - start of partition
-    cmp    w[actual_lba_lw], FAT16_BOOT_BLOCK_LBA_LW
+@@: cmp    w[actual_lba_lw], FAT16_BOOT_BLOCK_LBA_LW
     jne    @f
     cmp    w[actual_lba_uw], FAT16_BOOT_BLOCK_LBA_UW
     jne    @f
     call   build_fat16_boot_block
     ret
-@@: ;; FAT itself.
-    cmp    w[actual_lba_lw], FAT16_FAT_TABLES_BLOCK_LBA_LW
+    ;; FAT itself.
+@@: cmp    w[actual_lba_lw], FAT16_FAT_TABLES_BLOCK_LBA_LW
     jne    @f
     cmp    w[actual_lba_uw], FAT16_FAT_TABLES_BLOCK_LBA_UW
     jne    @f
+    call   build_fat16_fat ;; Build FAT
+    ret
     ;; Or, Copy of FAT. Keep PC OS from whining...
-    cmp    w[actual_lba_lw], FAT16_FAT_TABLES_COPY_BLOCK_LBA_LW
+@@: cmp    w[actual_lba_lw], FAT16_FAT_TABLES_COPY_BLOCK_LBA_LW
     jne    @f
     cmp    w[actual_lba_uw], FAT16_FAT_TABLES_COPY_BLOCK_LBA_UW
     jne    @f
-    ;; Build FAT
-    call   build_fat16_fat
+    call   build_fat16_fat ;; Build FAT
     ret
-@@:
     ;; Root Directory Entries
-    cmp    w[actual_lba_lw], FAT16_ROOT_DIRECTORY_ENTRY_LBA_LW
+@@: cmp    w[actual_lba_lw], FAT16_ROOT_DIRECTORY_ENTRY_LBA_LW
     jne    @f
     cmp    w[actual_lba_uw], FAT16_ROOT_DIRECTORY_ENTRY_LBA_UW
     jne    @f
     ;; Build Root Dir
     call   build_fat16_root_dir
     ret
-@@:
 zero_block: ; null
-    call   zap_send_buffer
+@@: call   zap_send_buffer
     ret
 ;*****************************************************************************
 
@@ -114,19 +110,33 @@ build_fat16_mbr:
 ;*****************************************************************************
 ;; FAT16 FAT
 ;*****************************************************************************
-align 2
-fat16_fat_data:
-        dw	0xfff8
-	dw	0xffff
-	FAT16_FAT_DATA_LEN equ ($-fat16_fat_data)
+;; ! QTASM IS RETARDED ! QTASM IS RETARDED ! QTASM IS RETARDED ! QTASM IS RETARDED
+;; ! QTASM IS RETARDED ! QTASM IS RETARDED ! QTASM IS RETARDED ! QTASM IS RETARDED
+;; ! QTASM IS RETARDED ! QTASM IS RETARDED ! QTASM IS RETARDED ! QTASM IS RETARDED
+;; ! QTASM IS RETARDED ! QTASM IS RETARDED ! QTASM IS RETARDED ! QTASM IS RETARDED
+
+;; FAT16_PART0_SECTORS_PER_CLUSTER == 0x040
+;; FAKE_FILE_BYTES		equ	0x100000 ; 1 MB
+;; FAT16_CLUSTER_SIZE		equ	(0x040 * BLOCKSIZE)
+;; FAKE_FILE_CLUSTERS		equ	(FAKE_FILE_BYTES / FAT16_CLUSTER_SIZE)
+
+FAKE_FILE_CLUSTERS	equ	32 ; 1 meg
 ;*****************************************************************************
 align 2
 build_fat16_fat:
     call   zap_send_buffer
-    mov    r8, fat16_fat_data
     mov    r9, send_buffer
-    mov    r1, (FAT16_FAT_DATA_LEN >> 1) ; word count
-    call   mem_move
+    mov    w[r9++], 0xfff8 ; Partition Type = HDD (0xf8);
+    mov    w[r9++], 0xffff ; State = Good (0xff) - TODO: Might need to be writable for mount!
+    mov    w[r9++], 0x0000 ; Cluster 0 is reserved, and its address is 2.
+    ;; There is exactly one file. Write its clusters:
+    mov    r0, 0x0003 ; Number of first cluster of file
+@@:
+    addi   r0, 1
+    mov    [r9++], r0
+    cmp    r0, (0x0003 + FAKE_FILE_CLUSTERS - 1)
+    jb     @b
+    mov    [r9++], 0xFFFF ; Now write the last cluster of file.
     ret
 ;*****************************************************************************
 
