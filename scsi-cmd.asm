@@ -122,7 +122,6 @@ SCSI_command_inquiry:
 @@:
     ret
 SCSI_command_mode_sense_6:
-    ;; jmp    scsi_cmd_not_implemented ;;;;;; NOT IMPLEMENTED YET ;;;;;;
     mov    w[response_length_uw], 0x0000
     mov    w[response_length_lw], 0xC0
     ret
@@ -312,15 +311,26 @@ SCSI_data_cmd_write_6:
     jmp    scsi_data_cmd_not_implemented  ;;;;;; NOT IMPLEMENTED YET ;;;;;;
     ret
 SCSI_data_cmd_write_10:
-    ;; This is wrong:
-    
-    ;; mov    r0, w[dwOffset_lw]
-    ;; and    r0, 0x01FF
-    ;; jnz    @f
-    ;; call   save_lba_block ;; if (dwBufPos == 0) then write new block:
+    mov    r0, w[dwOffset_lw]
+    and    r0, 0x01FF
+    jnz    @f
+    ;; load given LBA block index:
+    xor    r3, r3
+    xor    r4, r4
+    mov    r4, b[Write10_SCSI_CDB_LBA_3]
+    shl    r4, 8
+    or     r4, b[Write10_SCSI_CDB_LBA_2] ;; r4 = old lba high word
+    mov    r3, b[Write10_SCSI_CDB_LBA_1]
+    shl    r3, 8
+    or     r3, b[Write10_SCSI_CDB_LBA_0] ;; r3 = old lba low word
+    mov    w[given_lba_lw], r3
+    mov    w[given_lba_uw], r4
+    call   compute_actual_block_index	; compute corrected index
+
+    ;; now save:
+    call   save_lba_block ;; if (dwBufPos == 0) then write new block:
 
     ;; Because we want to write a *finished* block once it finishes.
-    ;; Unlike the READ-10.
     ret
 SCSI_data_cmd_verify_10: ;; nothing happens
     ret

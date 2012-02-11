@@ -175,7 +175,7 @@ fat16_root_dir_data:
         ;; *****************************************************************
         ;; Volume Label
         ;; *****************************************************************
-    	db      'USB        ' ; Volume Label (8 chars body + 3 chars ext)
+	db      'STIRLITZ   ' ; Volume Label (8 chars body + 3 chars ext)
 	db	0x08   ; Attrib = 0x08 (Volume Label)
 	dw	0x0000 ; b. 12 - n/a; b. 13 - creation time (10th of secs)
 	dw	0x0000 ; 14, 15: creation time (hours, minutes, seconds)

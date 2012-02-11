@@ -63,11 +63,6 @@ scsi_rx_state_jmp_table:
 do_rx_state_CBW:
     mov    w[usbrecv_len], CBW_Size	; how many bytes to receive
     call   usb_receive_data	; read CBW from host Bulk OUT endpoint
-
-    ;; push   r0
-    ;; call   dbg_dump_rx_buffer	; debug
-    ;; pop    r0
-    
     ;; Check for valid CBW:
     cmp    r0, 0		; how many bytes (of 31) failed to read?
     jne    invalid_cbw		; if any unread bytes, invalid.
