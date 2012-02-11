@@ -1,4 +1,13 @@
 ;*****************************************************************************
+;; The Payload (File)
+;*****************************************************************************
+FILE_SIZE_LW		equ	0x0000
+FILE_SIZE_UW		equ	0x0010
+FAKE_FILE_CLUSTERS	equ	32 ; 1 meg
+;*****************************************************************************
+
+
+;*****************************************************************************
 ;; Derived partition constants
 ;*****************************************************************************
 MBR_BLOCK_LBA_UW			equ     0x0000
@@ -15,6 +24,9 @@ FAT16_ROOT_DIRECTORY_ENTRY_LBA_LW	equ     (FAT16_FAT_TABLES_BLOCK_LBA_LW + ((FAT
 FAT16_DATA_AREA_LBA_UW			equ	0x0000
 FAT16_DATA_AREA_LBA_LW			equ	(FAT16_ROOT_DIRECTORY_ENTRY_LBA_LW + ((FAT16_PART0_MAX_ROOT_DIR_ENTRIES * 32) / BLOCKSIZE))
 
+;; Now, this is because 64 blocks are taken up by Cluster 0 (reserved)
+FAT16_DATA_AREA_LBA_UW_EFFECTIVE_BOTTOM	equ	0x0000
+FAT16_DATA_AREA_LBA_LW_EFFECTIVE_BOTTOM equ	(FAT16_DATA_AREA_LBA_LW + 64)
 ;*****************************************************************************
 
 

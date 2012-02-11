@@ -29,8 +29,31 @@ actual_lba_uw			dw 0x0000
 ;*****************************************************************************
 ;; Load LBA block
 ;*****************************************************************************
+;; watch out for carry (unhandled because QTASM is RETARDED ...)
+FILE_TOP_LW	equ	(FAT16_DATA_AREA_LBA_LW_EFFECTIVE_BOTTOM + FILE_SIZE_LW)
+FILE_TOP_UW	equ	(FAT16_DATA_AREA_LBA_UW_EFFECTIVE_BOTTOM + FILE_SIZE_UW)
+;*****************************************************************************
 load_lba_block:
     ;; Check for Data Area range:
+    ;; check if below:
+    cmp    w[actual_lba_uw], 0x0000
+    jne    @f ; if upper word of LBA != 0, then definitely NOT below range...
+    cmp    w[actual_lba_lw], FAT16_DATA_AREA_LBA_LW_EFFECTIVE_BOTTOM
+    jb     not_meat ; below range
+@@:
+    ;; Forget about checking upper bound, since we have just one file.
+    ;; In data range:
+    mov    r0, w[actual_lba_lw]
+    mov    r3, w[actual_lba_uw]
+    mov    r2, FAT16_DATA_AREA_LBA_LW_EFFECTIVE_BOTTOM
+    mov    r3, FAT16_DATA_AREA_LBA_UW_EFFECTIVE_BOTTOM
+    call   subtract_16 ;; R1:R0 - R3:R2
+    ;; WE HAVE A WINNER!
+    mov    w[physical_lba_lw], r0
+    mov    w[physical_lba_uw], r3
+    call   load_physical_lba_block
+    ret
+not_meat:
     ;; ...
     ;; else:
     ;; MBR?
@@ -119,8 +142,6 @@ build_fat16_mbr:
 ;; FAKE_FILE_BYTES		equ	0x100000 ; 1 MB
 ;; FAT16_CLUSTER_SIZE		equ	(0x040 * BLOCKSIZE)
 ;; FAKE_FILE_CLUSTERS		equ	(FAKE_FILE_BYTES / FAT16_CLUSTER_SIZE)
-
-FAKE_FILE_CLUSTERS	equ	32 ; 1 meg
 ;*****************************************************************************
 align 2
 build_fat16_fat:
@@ -140,11 +161,6 @@ build_fat16_fat:
     ret
 ;*****************************************************************************
 
-
-;*****************************************************************************
-FILE_SIZE_LW	equ	0x0000
-FILE_SIZE_UW	equ	0x0010
-;*****************************************************************************
 
 ;*****************************************************************************
 ;; FAT16 Root Directory
