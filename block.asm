@@ -142,23 +142,52 @@ build_fat16_fat:
 
 
 ;*****************************************************************************
+FILE_SIZE_LW	equ	0x0000
+FILE_SIZE_UW	equ	0x0010
+;*****************************************************************************
+
+;*****************************************************************************
 ;; FAT16 Root Directory
+;*****************************************************************************
+;; TODO:
+;; Looks like Linux actually tries to write access dates here...
+;; .................................... but only on unmount.
 ;*****************************************************************************
 align 2
 fat16_root_dir_data:
-    	dw	0x5355
-	dw	0x2042
-	dw	0x2020
-	dw	0x2020
-	dw	0x2020
-	dw	0x0820
-	dw	0x0000
-	dw	0x0000
-	dw	0x0000
-	dw	0x0000
-	dw	0x0000
-	dw	0xba27
-	dw	0x4046
+        ;; *****************************************************************
+        ;; Volume Label
+        ;; *****************************************************************
+    	db      'USB        ' ; Volume Label (8 chars body + 3 chars ext)
+	db	0x08   ; Attrib = 0x08 (Volume Label)
+	dw	0x0000 ; b. 12 - n/a; b. 13 - creation time (10th of secs)
+	dw	0x0000 ; 14, 15: creation time (hours, minutes, seconds)
+	dw	0x0000 ; creation date
+	dw	0x0000 ; access date
+	dw	0x0000 ; high word of 1st cluster address
+	dw	0xba27 ; modified time (hours, minutes, seconds)
+	dw	0x4046 ; modified date
+	dw	0x0000 ; low word of 1st cluster address
+	dw	0x0000 ; lower word of size (0 for directories)
+	dw	0x0000 ; upper word of size (0 for directories)
+        ;; *****************************************************************
+	;; If we wanted long file name, it would live here...
+	;; *****************************************************************
+        ;; The File itself
+        ;; *****************************************************************
+    	db      'STIRLITZBIN' ; Volume Label (8 chars body + 3 chars ext)
+	db	0x20   ; Attrib = 0x20 ("Archive")
+	dw	0x0000 ; b. 12 - n/a; b. 13 - creation time (10th of secs)
+	dw	0x0000 ; 14, 15: creation time (hours, minutes, seconds)
+	dw	0x0000 ; creation date
+	dw	0x0000 ; access date
+	dw	0x0000 ; high word of 1st cluster address
+	dw	0xba27 ; modified time (hours, minutes, seconds)
+	dw	0x4046 ; modified date
+	dw	0x0003 ; low word of 1st cluster address
+	dw	FILE_SIZE_LW ; lower word of size (0 for directories)
+	dw	FILE_SIZE_UW ; upper word of size (0 for directories)	
+        ;; *****************************************************************
 	FAT16_ROOT_DIR_DATA_LEN equ ($-fat16_root_dir_data)
 ;*****************************************************************************
 align 2
