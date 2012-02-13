@@ -119,3 +119,33 @@ print_newline:
     pop    r0
     ret
 ;*****************************************************************************
+;; Title char in Debug_Title; Word in {Debug_UW, Debug_LW}
+Debug_Title	dw	0x0000
+Debug_LW	dw	0x0000
+Debug_UW	dw	0x0000
+;*****************************************************************************
+dbg_print_32bit:
+    int    PUSHALL_INT
+    mov	   r0, w[Debug_Title]
+    call   dbg_putchar
+    call   print_newline
+    mov	   r0, 0x003D		; =
+    call   dbg_putchar
+    mov    r1, w[Debug_UW]
+    shr    r1, 8
+    and    r1, 0xFF
+    call   print_hex_byte
+    mov    r1, w[Debug_UW]
+    and    r1, 0xFF
+    call   print_hex_byte
+    mov    r1, w[Debug_LW]
+    shr    r1, 8
+    and    r1, 0xFF
+    call   print_hex_byte
+    mov    r1, w[Debug_LW]
+    and    r1, 0xFF
+    call   print_hex_byte
+    call   print_newline
+    int    POPALL_INT
+    ret
+;*****************************************************************************

@@ -102,11 +102,26 @@ valid_cbw:
     cmp    b[cmd_must_stall_flag], 0x01
     jne    @f
     ;; if (pbData == NULL)
+
+    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+    push   r0
+    mov	   r0, 0x0031		; 1
+    call   dbg_putchar
+    pop    r0
+    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+    
     call   stall_transfer
     mov    r0, CSW_CMD_FAILED
     call   send_csw
     ret
 @@:
+    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+    push   r0
+    mov	   r0, 0x0032		; 2
+    call   dbg_putchar
+    pop    r0
+    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
     ;; if device and host disagree on direction, send Phase Error status.
     cmp    w[response_length_uw], 0
     jne    yes_response
@@ -114,10 +129,19 @@ valid_cbw:
     je     no_disagree
 yes_response:
     ;; if (response length > 0)
+    ;; xor    r0, r0
     mov    r0, b[host_in_flag]
     xor    r0, b[dev_in_flag]
     jz     no_disagree
     ;; && ((fHostIn && !fDevIn) || (!fHostIn && fDevIn)) then:
+
+    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+    push   r0
+    mov	   r0, 0x0033		; 3
+    call   dbg_putchar
+    pop    r0
+    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
     call   stall_transfer
     mov    r0, CSW_PHASE_ERROR
     call   send_csw
@@ -132,31 +156,89 @@ no_disagree:
     call   subtract_16
     jnc    @f	  ; If result < 0?
     ;; if (iLen > CBW.dwCBWDataTransferLength) then: negative residue
+
+    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+    push   r0
+    mov	   r0, 0x0034		; 4
+    call   dbg_putchar
+    pop    r0
+    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+    
     call   stall_transfer
     mov    r0, CSW_PHASE_ERROR
     call   send_csw
     ret
 @@:
+
+    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+    push   r0
+    mov	   r0, 0x0035		; 5
+    call   dbg_putchar
+    pop    r0
+    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
     ;; dwTransferSize = iLen
     mov    w[dwTransferSize_lw], w[response_length_lw]
     mov    w[dwTransferSize_uw], w[response_length_uw]
+
+    ;; mov	   w[Debug_Title], 0x54 ; T
+    ;; mov    w[Debug_UW], w[dwTransferSize_uw]
+    ;; mov    w[Debug_LW], w[dwTransferSize_lw]
+    ;; call   dbg_print_32bit
+
     ;; if ((dwTransferSize == 0) || fDevIn)
     cmp    w[dwTransferSize_lw], 0x0000
     jne    @f
     cmp    w[dwTransferSize_lw], 0x0000
     jne    @f
     jmp    device_to_host
-@@:
-    cmp    b[dev_in_flag], 0x01
-    je     device_to_host
+@@: ;; else, host to device:
+
+    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+    push   r0
+    mov	   r0, 0x0036		; 6
+    call   dbg_putchar
+    pop    r0
+    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+    ;; cmp    b[dev_in_flag], 0x01
+    ;; je     device_to_host
+    test   b[dev_in_flag], 1
+    jnz    device_to_host
+
+    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+    push   r0
+    mov	   r0, 0x0037		; 7
+    call   dbg_putchar
+    pop    r0
+    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+    
     ;; otherwise, data from host to device:
     mov    b[scsi_state], SCSI_state_data_out
     ret
 device_to_host:
+
+    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+    push   r0
+    mov	   r0, 0x0038		; 8
+    call   dbg_putchar
+    pop    r0
+    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+
     mov    b[scsi_state], SCSI_state_data_in
     call   handle_data_in
     ret
 do_rx_state_data_out:
+
+    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+    push   r0
+    mov	   r0, 0x0039		; 9
+    call   dbg_putchar
+    pop    r0
+    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+
     call   handle_data_out
     ret
 do_rx_state_data_in:
@@ -166,6 +248,15 @@ do_rx_state_CSW:
     ;; mov    b[scsi_state], SCSI_state_CBW
     ret
 do_rx_state_stalled:
+
+    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+    push   r0
+    mov	   r0, 0x0039		; 9
+    call   dbg_putchar
+    pop    r0
+    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+
     call   stall_bulk_out_ep ; if stalled, keep stalling:
     ret
 ;*****************************************************************************
@@ -242,8 +333,10 @@ stall_bulk_in_ep: ; Select endpoint 1 (IN) control register
     mov    r9, DEV2_EP1_CTL_REG
 set_stall_bit: ; Stall the endpoint:
     or     [r9], STALL_EN
+
     mov	   r0, 0x0053		; S
     call   dbg_putchar
+    
     ret
 ;*****************************************************************************
 

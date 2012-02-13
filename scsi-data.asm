@@ -8,6 +8,23 @@ align 2
 ; Handle SCSI Data Out. (Host to Device)
 ;*****************************************************************************
 handle_data_out:
+    mov	   r0, 0x0058		; X
+    call   dbg_putchar
+
+    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+    ;; mov	   w[Debug_Title], 0x54 ; T
+    ;; mov    w[Debug_LW], w[dwTransferSize_lw]
+    ;; mov    w[Debug_UW], w[dwTransferSize_uw]
+    ;; call   dbg_print_32bit
+    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+    ;; mov	   w[Debug_Title], 0x4F ; O
+    ;; mov    w[Debug_LW], w[dwOffset_lw]
+    ;; mov    w[Debug_UW], w[dwOffset_uw]
+    ;; call   dbg_print_32bit
+    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
     mov    r0, w[dwTransferSize_lw]
     mov    r1, w[dwTransferSize_uw] ; R1:R0 = dwTransferSize
     mov    r2, w[dwOffset_lw]
@@ -20,24 +37,48 @@ handle_data_out:
     ;; r0 already = dwTransferSize - dwOffset
     mov    w[usbrecv_len], r0 ; how many bytes to receive
     call   usb_receive_data ; receive data from host
+
+    ;; mov	   r0, 0x0031		; 1
+    ;; call   dbg_putchar
+    
     call   SCSI_handle_data
+
+    ;; mov	   r0, 0x0032		; 2
+    ;; call   dbg_putchar
+    
     cmp    b[dat_must_stall_flag], 0x01
     jne    @f
+
+    ;; mov	   r0, 0x0033		; 3
+    ;; call   dbg_putchar
+    
     ;; if pbData == NULL:
     call   stall_transfer
     mov    r0, CSW_CMD_FAILED
     call   send_csw
     ret
 @@:
+
+    ;; mov	   r0, 0x0034		; 4
+    ;; call   dbg_putchar
+
     mov    r0, w[iChunk]
     add    w[dwOffset_lw], r0   ; dwOffset += iChunk
     addc   w[dwOffset_uw], 0 	; add possible carry
 no_data_out:
+
+    ;; mov	   r0, 0x0035		; 5
+    ;; call   dbg_putchar
+
     cmp    w[dwOffset_lw], w[dwTransferSize_lw]
     jne    data_out_done
     cmp    w[dwOffset_uw], w[dwTransferSize_uw]
     jne    data_out_done
     ;; if (dwOffset == dwTransferSize)
+
+    ;; mov	   r0, 0x0036		; 6
+    ;; call   dbg_putchar
+    
     mov    r0, w[CBW_data_transfer_length_lw]
     cmp    w[dwOffset_lw], r0
     jne    data_out_stall
@@ -45,11 +86,20 @@ no_data_out:
     cmp    w[dwOffset_uw], r0
     jne    data_out_stall
 data_out_send_csw:
+
+    ;; mov	   r0, 0x0037		; 7
+    ;; call   dbg_putchar
+
+
     mov    r0, CSW_CMD_PASSED
     call   send_csw
 data_out_done:
     ret
 data_out_stall:
+
+    ;; mov	   r0, 0x0038		; 8
+    ;; call   dbg_putchar
+
     call   stall_transfer
     jmp    data_out_send_csw
 ;*****************************************************************************
