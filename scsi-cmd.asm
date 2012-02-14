@@ -347,18 +347,18 @@ SCSI_data_cmd_write_10:
     mov    w[given_lba_lw], r3
     mov    w[given_lba_uw], r4
 
-    int    PUSHALL_INT
-    mov    w[Debug_Title], 0x4C ; L
-    mov    w[Debug_LW], w[given_lba_lw]
-    mov    w[Debug_UW], w[given_lba_uw]
-    call   dbg_print_32bit
-    call   dbg_printspace
-    mov    w[Debug_Title], 0x4F ; O
-    mov    w[Debug_LW], w[dwOffset_lw]
-    mov    w[Debug_UW], w[dwOffset_uw]
-    call   dbg_print_32bit
-    call   print_newline
-    int    POPALL_INT
+    ;; int    PUSHALL_INT
+    ;; mov    w[Debug_Title], 0x4C ; L
+    ;; mov    w[Debug_LW], w[given_lba_lw]
+    ;; mov    w[Debug_UW], w[given_lba_uw]
+    ;; call   dbg_print_32bit
+    ;; call   dbg_printspace
+    ;; mov    w[Debug_Title], 0x4F ; O
+    ;; mov    w[Debug_LW], w[dwOffset_lw]
+    ;; mov    w[Debug_UW], w[dwOffset_uw]
+    ;; call   dbg_print_32bit
+    ;; call   print_newline
+    ;; int    POPALL_INT
 
     call   compute_actual_block_index	; compute corrected index
 
