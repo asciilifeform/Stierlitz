@@ -87,14 +87,14 @@ ep1:  db 0x07       ; len
       db EP_IN_ADDR ; bEndpointAddress (EP 1 IN)
       db 0x02	    ; bmAttributes = Bulk
       dw USB_PACKET_SIZE ; packet size = 64 bytes
-      db 0          ; bInterval
+      db EP_IN_BINTERVAL ; bInterval
 ;; --------------------------------------------------
 ep2:  db 0x07       ; len
       db 0x05       ; type (endpoint)
       db EP_OUT_ADDR ; bEndpointAddress (EP 2 OUT)
       db 0x02       ; bmAttributes = Bulk
       dw USB_PACKET_SIZE ; packet size = 64 bytes
-      db 0          ; bInterval
+      db EP_OUT_BINTERVAL ; bInterval
 ;; --------------------------------------------------
 end_all:
       align 2

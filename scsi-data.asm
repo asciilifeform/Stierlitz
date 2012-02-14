@@ -31,7 +31,27 @@ handle_data_out:
     mov    r0, w[iChunk] ; number of bytes to receive from bulk_out_ep
     mov    w[usbrecv_len], r0 ; how many bytes to receive
     mov    w[usbrecv_addr], receive_buffer ; into Block buffer!
+
+    ;; !!!!!!!!!!!!!!!!!!!!!
+    ;; int    PUSHALL_INT
+    ;; call   print_newline
+    ;; mov	   r0, 0x004C		; L
+    ;; call   dbg_putchar
+    ;; mov	   r0, 0x003D		; =
+    ;; call   dbg_putchar
+    ;; mov    r1, w[iChunk]
+    ;; shr    r1, 8
+    ;; and    r1, 0xFF
+    ;; call   print_hex_byte
+    ;; mov    r1, w[iChunk]
+    ;; and    r1, 0xFF
+    ;; call   print_hex_byte
+    ;; int    POPALL_INT
+    ;; !!!!!!!!!!!!!!!!!!!!!
+    
     call   usb_receive_data ; receive data from host
+
+    
     call   SCSI_handle_data
     cmp    b[dat_must_stall_flag], 0x01
     jne    @f
