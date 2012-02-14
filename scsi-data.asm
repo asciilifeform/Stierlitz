@@ -16,29 +16,6 @@ handle_data_out:
     mov    r3, w[dwOffset_uw] ; R3:R2 = dwOffset
     ;; R1:R0 - R3:R2
     call   subtract_16
-
-    ;; jnc    @f
-;;     jc     @f
-;;     int    PUSHALL_INT
-;;     mov    w[Debug_Title], 0x40 ; @
-;;     mov    w[Debug_LW], r0
-;;     mov    w[Debug_UW], r1
-;;     call   dbg_print_32bit
-;;     ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;     mov    w[Debug_Title], 0x54 ; T
-;;     mov    w[Debug_LW], w[dwTransferSize_lw]
-;;     mov    w[Debug_UW], w[dwTransferSize_uw]
-;;     call   dbg_print_32bit
-;;     ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;     ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;     mov    w[Debug_Title], 0x4F ; O
-;;     mov    w[Debug_LW], w[dwOffset_lw]
-;;     mov    w[Debug_UW], w[dwOffset_uw]
-;;     call   dbg_print_32bit
-;;     ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;     int    POPALL_INT
-;; @@:
-
     ;; jc     no_data_out ; if carry, then dwOffset > dwTransferSize
     
     ;; if (dwOffset < dwTransferSize)
@@ -59,7 +36,6 @@ handle_data_out:
     mov    r0, w[dwOffset_lw] ; only need lower word of dwoffset to calculate offset into block
     and    r0, 0x01FF ;; dwBufPos = (dwOffset & (BLOCKSIZE - 1))
     add    w[usbrecv_addr], r0
-    
     call   usb_receive_data ; receive data from host
     call   SCSI_handle_data
     cmp    b[dat_must_stall_flag], 0x01
@@ -103,10 +79,6 @@ handle_data_in:
     cmp    b[dat_must_stall_flag], 0x01
     jne    @f
     ;; pbData == NULL:
-
-    mov	   r0, 0x0031		; 1
-    call   dbg_putchar
-    
     call   stall_transfer
     mov    r0, CSW_CMD_FAILED
     call   send_csw
@@ -144,7 +116,6 @@ handle_data_in:
     cmp    w[dwOffset_uw], w[dwTransferSize_uw]
     jne    data_in_done
     ;; if (dwOffset == dwTransferSize)
-    
     ;; mov    r0, w[CBW_data_transfer_length_lw]
     ;; cmp    w[dwOffset_lw], r0
     ;; jne    data_in_stall
@@ -157,10 +128,6 @@ data_in_send_csw:
 data_in_done:
     ret
 data_in_stall:
-
-    mov	   r0, 0x0073		; s
-    call   dbg_putchar
-
     call   stall_transfer
     jmp    data_in_send_csw
 ;*****************************************************************************

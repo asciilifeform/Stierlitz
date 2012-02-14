@@ -112,7 +112,6 @@ SCSI_command_format_unit:
     ret
 SCSI_command_inquiry:
     ;; rsplen = min(36, pCDB->bLength)
-    
     mov    w[response_length_uw], 0x0000
     mov    w[response_length_lw], 36
     xor    r0, r0
@@ -121,12 +120,6 @@ SCSI_command_inquiry:
     jbe    @f
     mov    w[response_length_lw], r0
 @@:
-
-    ;; mov    w[response_length_uw], 0x0000
-    ;; xor    r0, r0
-    ;; mov    r0, b[Inquiry_SCSI_CDB_bLength]
-    ;; mov    w[response_length_lw], r0
-
     ret
 SCSI_command_mode_sense_6:
     mov    w[response_length_uw], 0x0000
@@ -332,7 +325,7 @@ SCSI_data_cmd_write_6:
     jmp    scsi_data_cmd_not_implemented  ;;;;;; NOT IMPLEMENTED YET ;;;;;;
     ret
 SCSI_data_cmd_write_10:
-    ;; First, find out if we just started receiving a block:
+    ;; Find out if we just started receiving a block:
     mov    r0, w[dwOffset_lw]
     and    r0, 0x01FF
     jnz    @f
@@ -348,12 +341,10 @@ SCSI_data_cmd_write_10:
     mov    w[given_lba_lw], r3
     mov    w[given_lba_uw], r4
     call   compute_actual_block_index	; compute corrected index
-    ret
 @@:
     ;; Did we just finish receiving a block?
-    mov    r0, w[usbrecv_addr]
-    cmp    r0, (BLOCKSIZE - USB_PACKET_SIZE)
-    jb     @f ; no. we're in mid-block.
+    cmp    w[usbrecv_addr], (block_receive_buffer + BLOCKSIZE)
+    jne    @f ; no. we're in mid-block.
     ;; Yes, we did:
     call   save_lba_block
 @@:
