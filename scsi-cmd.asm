@@ -346,6 +346,20 @@ SCSI_data_cmd_write_10:
     or     r3, b[Write10_SCSI_CDB_LBA_0] ;; r3 = old lba low word
     mov    w[given_lba_lw], r3
     mov    w[given_lba_uw], r4
+
+    int    PUSHALL_INT
+    mov    w[Debug_Title], 0x4C ; L
+    mov    w[Debug_LW], w[given_lba_lw]
+    mov    w[Debug_UW], w[given_lba_uw]
+    call   dbg_print_32bit
+    call   dbg_printspace
+    mov    w[Debug_Title], 0x4F ; O
+    mov    w[Debug_LW], w[dwOffset_lw]
+    mov    w[Debug_UW], w[dwOffset_uw]
+    call   dbg_print_32bit
+    call   print_newline
+    int    POPALL_INT
+
     call   compute_actual_block_index	; compute corrected index
 
     ;; now save:

@@ -8,25 +8,6 @@ align 2
 ; Handle SCSI Data Out. (Host to Device)
 ;*****************************************************************************
 handle_data_out:
-    ;; mov	   r0, 0x0058		; X
-    ;; call   dbg_putchar
-
-    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-    ;; call print_newline
-    ;; mov w[Debug_Title], 0x54 ; T
-    ;; mov w[Debug_LW], w[dwTransferSize_lw]
-    ;; mov w[Debug_UW], w[dwTransferSize_uw]
-    ;; call dbg_print_32bit
-    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-    ;; call print_newline
-    ;; mov w[Debug_Title], 0x4F ; O
-    ;; mov w[Debug_LW], w[dwOffset_lw]
-    ;; mov w[Debug_UW], w[dwOffset_uw]
-    ;; call dbg_print_32bit
-    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
     mov    w[iChunk], USB_PACKET_SIZE ; start with 64
     
     mov    r0, w[dwTransferSize_lw]
@@ -35,7 +16,29 @@ handle_data_out:
     mov    r3, w[dwOffset_uw] ; R3:R2 = dwOffset
     ;; R1:R0 - R3:R2
     call   subtract_16
-    
+
+    ;; jnc    @f
+;;     jc     @f
+;;     int    PUSHALL_INT
+;;     mov    w[Debug_Title], 0x40 ; @
+;;     mov    w[Debug_LW], r0
+;;     mov    w[Debug_UW], r1
+;;     call   dbg_print_32bit
+;;     ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;     mov    w[Debug_Title], 0x54 ; T
+;;     mov    w[Debug_LW], w[dwTransferSize_lw]
+;;     mov    w[Debug_UW], w[dwTransferSize_uw]
+;;     call   dbg_print_32bit
+;;     ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;     ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;     mov    w[Debug_Title], 0x4F ; O
+;;     mov    w[Debug_LW], w[dwOffset_lw]
+;;     mov    w[Debug_UW], w[dwOffset_uw]
+;;     call   dbg_print_32bit
+;;     ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;     int    POPALL_INT
+;; @@:
+
     ;; jc     no_data_out ; if carry, then dwOffset > dwTransferSize
     
     ;; if (dwOffset < dwTransferSize)

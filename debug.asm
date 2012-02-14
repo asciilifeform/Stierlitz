@@ -126,7 +126,6 @@ Debug_UW	dw	0x0000
 ;*****************************************************************************
 dbg_print_32bit:
     int    PUSHALL_INT
-    call   print_newline
     mov	   r0, w[Debug_Title]
     call   dbg_putchar
     mov	   r0, 0x003D		; =
@@ -145,7 +144,11 @@ dbg_print_32bit:
     mov    r1, w[Debug_LW]
     and    r1, 0xFF
     call   print_hex_byte
-    call   print_newline
     int    POPALL_INT
+    ret
+;*****************************************************************************
+dbg_printspace:
+    mov    r0, 0x0020
+    call   dbg_putchar 		; print space between byte values:
     ret
 ;*****************************************************************************
