@@ -152,3 +152,37 @@ dbg_printspace:
     call   dbg_putchar 		; print space between byte values:
     ret
 ;*****************************************************************************
+;; Print current block index:
+;*****************************************************************************
+;; dbg_print_read_block_index:
+;;     int    PUSHALL_INT
+;;     mov	   r0, 0x0052		; R
+;;     jmp    @f
+;; dbg_print_write_block_index:
+;;     int    PUSHALL_INT
+;;     mov	   r0, 0x0057		; W
+;; @@:
+;;     call   dbg_putchar
+;;     mov	   r0, 0x0042		; B
+;;     call   dbg_putchar   
+;;     mov	   r0, 0x003D		; =
+;;     call   dbg_putchar
+;;     ;; print actual LBA index:
+;;     mov    r1, w[actual_lba_uw]
+;;     shr    r1, 8
+;;     and    r1, 0xFF
+;;     call   print_hex_byte
+;;     mov    r1, w[actual_lba_uw]
+;;     and    r1, 0xFF
+;;     call   print_hex_byte
+;;     mov    r1, w[actual_lba_lw]
+;;     shr    r1, 8
+;;     and    r1, 0xFF
+;;     call   print_hex_byte
+;;     mov    r1, w[actual_lba_lw]
+;;     and    r1, 0xFF
+;;     call   print_hex_byte
+;;     call   print_newline
+;;     int    POPALL_INT
+;;     ret
+;*****************************************************************************

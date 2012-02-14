@@ -29,6 +29,11 @@ actual_lba_uw			dw 0x0000
 ;*****************************************************************************
 ;; Test if LBA block is within the payload range.
 ;*****************************************************************************
+;; watch out for carry (unhandled because QTASM is RETARDED ...)
+;; TODO: there's none right now. but check here again when we up the virtual file size.
+FILE_TOP_LW	equ	(FAT16_DATA_AREA_LBA_LW_EFFECTIVE_BOTTOM + FILE_SIZE_IN_BLKS_LW)
+FILE_TOP_UW	equ	(FAT16_DATA_AREA_LBA_UW_EFFECTIVE_BOTTOM + FILE_SIZE_IN_BLKS_UW)
+;*****************************************************************************
 test_lba_block_in_payload_range:
     ;; check if below Data Area range:
     cmp    w[actual_lba_uw], 0x0000
@@ -60,10 +65,6 @@ not_payload:
 
 ;*****************************************************************************
 ;; Load LBA block
-;*****************************************************************************
-;; watch out for carry (unhandled because QTASM is RETARDED ...)
-FILE_TOP_LW	equ	(FAT16_DATA_AREA_LBA_LW_EFFECTIVE_BOTTOM + FILE_SIZE_IN_BLKS_LW)
-FILE_TOP_UW	equ	(FAT16_DATA_AREA_LBA_UW_EFFECTIVE_BOTTOM + FILE_SIZE_IN_BLKS_UW)
 ;*****************************************************************************
 load_lba_block:
     call   test_lba_block_in_payload_range
@@ -116,6 +117,22 @@ zero_block: ; default - null block:
 
 
 ;*****************************************************************************
+;; Save LBA block
+;*****************************************************************************
+save_lba_block:
+    call   test_lba_block_in_payload_range
+    test   r0, 1
+    jz     @f
+    ;; this was a payload block:
+    call   save_physical_lba_block
+    ret	; and so we're done here.
+@@:
+    ;; don't do anything for non-payload blocks...
+    ret
+;*****************************************************************************
+
+
+;*****************************************************************************
 ;; FAT16 MBR
 ;*****************************************************************************
 align 2
@@ -150,14 +167,13 @@ build_fat16_mbr:
 ;; FAT16 FAT
 ;*****************************************************************************
 ;; ! QTASM IS RETARDED ! QTASM IS RETARDED ! QTASM IS RETARDED ! QTASM IS RETARDED
-;; ! QTASM IS RETARDED ! QTASM IS RETARDED ! QTASM IS RETARDED ! QTASM IS RETARDED
-;; ! QTASM IS RETARDED ! QTASM IS RETARDED ! QTASM IS RETARDED ! QTASM IS RETARDED
-;; ! QTASM IS RETARDED ! QTASM IS RETARDED ! QTASM IS RETARDED ! QTASM IS RETARDED
-
+;*****************************************************************************
 ;; FAT16_PART0_SECTORS_PER_CLUSTER == 0x040
 ;; FAKE_FILE_BYTES		equ	0x100000 ; 1 MB
 ;; FAT16_CLUSTER_SIZE		equ	(0x040 * BLOCKSIZE)
 ;; FAKE_FILE_CLUSTERS		equ	(FAKE_FILE_BYTES / FAT16_CLUSTER_SIZE)
+;*****************************************************************************
+;; ! QTASM IS RETARDED ! QTASM IS RETARDED ! QTASM IS RETARDED ! QTASM IS RETARDED
 ;*****************************************************************************
 align 2
 build_fat16_fat:
@@ -278,58 +294,5 @@ build_fat16_boot_block:
     dec    r1
     jnz    @b
     mov    w[BOOT_SIGNATURE_OFFSET], BOOT_SIGNATURE
-    ret
-;*****************************************************************************
-
-
-;*****************************************************************************
-;; Save LBA block
-;*****************************************************************************
-save_lba_block:
-    call   test_lba_block_in_payload_range
-    test   r0, 1
-    jz     @f
-    ;; this was a payload block:
-    call   save_physical_lba_block
-    ret	; and so we're done here.
-@@:
-    ;; don't do anything for non-payload blocks...
-    ret
-;*****************************************************************************
-
-
-;*****************************************************************************
-;; Print current block index:
-;*****************************************************************************
-dbg_print_read_block_index:
-    int    PUSHALL_INT
-    mov	   r0, 0x0052		; R
-    jmp    @f
-dbg_print_write_block_index:
-    int    PUSHALL_INT
-    mov	   r0, 0x0057		; W
-@@:
-    call   dbg_putchar
-    mov	   r0, 0x0042		; B
-    call   dbg_putchar   
-    mov	   r0, 0x003D		; =
-    call   dbg_putchar
-    ;; print actual LBA index:
-    mov    r1, w[actual_lba_uw]
-    shr    r1, 8
-    and    r1, 0xFF
-    call   print_hex_byte
-    mov    r1, w[actual_lba_uw]
-    and    r1, 0xFF
-    call   print_hex_byte
-    mov    r1, w[actual_lba_lw]
-    shr    r1, 8
-    and    r1, 0xFF
-    call   print_hex_byte
-    mov    r1, w[actual_lba_lw]
-    and    r1, 0xFF
-    call   print_hex_byte
-    call   print_newline
-    int    POPALL_INT
     ret
 ;*****************************************************************************
