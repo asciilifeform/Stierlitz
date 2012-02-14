@@ -146,7 +146,7 @@ no_disagree:
     ;; if ((dwTransferSize == 0) || fDevIn)
     cmp    w[dwTransferSize_lw], 0x0000
     jne    @f
-    cmp    w[dwTransferSize_lw], 0x0000
+    cmp    w[dwTransferSize_uw], 0x0000
     jne    @f
     jmp    device_to_host
 @@: ;; else, host to device:

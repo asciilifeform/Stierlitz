@@ -21,8 +21,8 @@ handle_data_out:
     ;; iChunk = USBHwEPRead(bulk_out_ep, pbData, dwTransferSize - dwOffset)
     ;; r0 already = dwTransferSize - dwOffset
     ;; iChunk = MIN(64, dwTransferSize - dwOffset)
-    cmp    r1, 0
-    jne    @f ; if upper word of subtraction result is nonzero, then definitely > 64
+    and    r1, r1
+    jnz    @f ; if upper word of subtraction result is nonzero, then definitely > 64
     mov    r4, r0
     and    r4, (1 + (0xFFFF - USB_PACKET_SIZE)) ; 64: 0xFFC0
     jnz    @f ; if lower word is greater than 64, then keep iChunk == 64.
