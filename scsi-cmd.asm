@@ -112,6 +112,7 @@ SCSI_command_format_unit:
     ret
 SCSI_command_inquiry:
     ;; rsplen = min(36, pCDB->bLength)
+    
     mov    w[response_length_uw], 0x0000
     mov    w[response_length_lw], 36
     xor    r0, r0
@@ -120,6 +121,12 @@ SCSI_command_inquiry:
     jbe    @f
     mov    w[response_length_lw], r0
 @@:
+
+    ;; mov    w[response_length_uw], 0x0000
+    ;; xor    r0, r0
+    ;; mov    r0, b[Inquiry_SCSI_CDB_bLength]
+    ;; mov    w[response_length_lw], r0
+
     ret
 SCSI_command_mode_sense_6:
     mov    w[response_length_uw], 0x0000

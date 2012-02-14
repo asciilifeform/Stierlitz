@@ -61,7 +61,7 @@ scsi_rx_state_jmp_table:
     dw     do_rx_state_stalled
     ;; ------------------------
 do_rx_state_CBW:
-    mov    w[usbrecv_addr], cbw_receive_buffer
+    mov    w[usbrecv_addr], receive_buffer
     mov    w[usbrecv_len], CBW_Size	; how many bytes to receive
     call   usb_receive_data	; read CBW from host Bulk OUT endpoint
     

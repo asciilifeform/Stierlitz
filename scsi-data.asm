@@ -8,6 +8,10 @@ align 2
 ; Handle SCSI Data Out. (Host to Device)
 ;*****************************************************************************
 handle_data_out:
+    mov	   r0, 0x0058		; X
+    call   dbg_putchar
+
+
     mov    w[iChunk], USB_PACKET_SIZE ; start with 64
     
     mov    r0, w[dwTransferSize_lw]
@@ -30,7 +34,7 @@ handle_data_out:
 @@:
     mov    r0, w[iChunk] ; number of bytes to receive from bulk_out_ep
     mov    w[usbrecv_len], r0 ; how many bytes to receive
-    mov    w[usbrecv_addr], receive_buffer ; into Block buffer!
+    mov    w[usbrecv_addr], block_receive_buffer ; into Block buffer!
 
     ;; !!!!!!!!!!!!!!!!!!!!!
     ;; int    PUSHALL_INT
@@ -94,6 +98,10 @@ handle_data_in:
     cmp    b[dat_must_stall_flag], 0x01
     jne    @f
     ;; pbData == NULL:
+
+    mov	   r0, 0x0031		; 1
+    call   dbg_putchar
+    
     call   stall_transfer
     mov    r0, CSW_CMD_FAILED
     call   send_csw
@@ -111,7 +119,6 @@ handle_data_in:
     call   subtract_16
     cmp    r1, 0
     jne    @f ; if upper word of subtraction result is nonzero, then definitely > 64
-
     mov    r4, r0
     and    r4, (1 + (0xFFFF - USB_PACKET_SIZE)) ; 64: 0xFFC0
     jnz    @f ; if lower word is greater than 64, then keep iChunk == 64.
@@ -132,18 +139,39 @@ handle_data_in:
     cmp    w[dwOffset_uw], w[dwTransferSize_uw]
     jne    data_in_done
     ;; if (dwOffset == dwTransferSize)
-    mov    r0, w[CBW_data_transfer_length_lw]
-    cmp    w[dwOffset_lw], r0
-    jne    data_in_stall
-    mov    r0, w[CBW_data_transfer_length_uw]
-    cmp    w[dwOffset_uw], r0
-    jne    data_in_stall
+
+    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+    ;; call print_newline
+    ;; mov w[Debug_Title], 0x54 ; T
+    ;; mov w[Debug_LW], w[CBW_data_transfer_length_lw]
+    ;; mov w[Debug_UW], w[CBW_data_transfer_length_uw]
+    ;; call dbg_print_32bit
+    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+    ;; call print_newline
+    ;; mov w[Debug_Title], 0x4F ; O
+    ;; mov w[Debug_LW], w[dwOffset_lw]
+    ;; mov w[Debug_UW], w[dwOffset_uw]
+    ;; call dbg_print_32bit
+    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+    
+    ;; mov    r0, w[CBW_data_transfer_length_lw]
+    ;; cmp    w[dwOffset_lw], r0
+    ;; jne    data_in_stall
+    ;; mov    r0, w[CBW_data_transfer_length_uw]
+    ;; cmp    w[dwOffset_uw], r0
+    ;; jne    data_in_stall
 data_in_send_csw:
     mov    r0, CSW_CMD_PASSED
     call   send_csw
 data_in_done:
     ret
 data_in_stall:
+
+    mov	   r0, 0x0073		; s
+    call   dbg_putchar
+
     call   stall_transfer
     jmp    data_in_send_csw
 ;*****************************************************************************
