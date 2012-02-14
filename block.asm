@@ -27,25 +27,21 @@ actual_lba_uw			dw 0x0000
 
 
 ;*****************************************************************************
-;; Load LBA block
+;; Test if LBA block is within the payload range.
 ;*****************************************************************************
-;; watch out for carry (unhandled because QTASM is RETARDED ...)
-FILE_TOP_LW	equ	(FAT16_DATA_AREA_LBA_LW_EFFECTIVE_BOTTOM + FILE_SIZE_IN_BLKS_LW)
-FILE_TOP_UW	equ	(FAT16_DATA_AREA_LBA_UW_EFFECTIVE_BOTTOM + FILE_SIZE_IN_BLKS_UW)
-;*****************************************************************************
-load_lba_block:
+test_lba_block_in_payload_range:
     ;; check if below Data Area range:
     cmp    w[actual_lba_uw], 0x0000
     jne    @f ; if upper word of LBA != 0, then definitely NOT below range...
     cmp    w[actual_lba_lw], FAT16_DATA_AREA_LBA_LW_EFFECTIVE_BOTTOM
-    jb     not_meat ; below range
+    jb     not_payload ; below range
 @@: ; not below range:
     mov    r0, w[actual_lba_lw]
     mov    r1, w[actual_lba_uw]
     mov    r2, FILE_TOP_LW
     mov    r3, FILE_TOP_UW
     call   subtract_16 ;; R1:R0 - R3:R2
-    jnc    not_meat    ; above top of range
+    jnc    not_payload ; above top of range
     ;; Otherwise... WE HAVE A WINNER!
     mov    r0, w[actual_lba_lw]
     mov    r1, w[actual_lba_uw]
@@ -54,9 +50,28 @@ load_lba_block:
     call   subtract_16 ;; R1:R0 - R3:R2
     mov    w[physical_lba_lw], r0
     mov    w[physical_lba_uw], r3
-    call   load_physical_lba_block
+    mov    r0, 0x0001 ; True, and physical block index (in 0...N) was computed.
     ret
-not_meat: ;; else, what could it be?
+not_payload:
+    mov    r0, 0x0000 ; False
+    ret
+;*****************************************************************************
+
+
+;*****************************************************************************
+;; Load LBA block
+;*****************************************************************************
+;; watch out for carry (unhandled because QTASM is RETARDED ...)
+FILE_TOP_LW	equ	(FAT16_DATA_AREA_LBA_LW_EFFECTIVE_BOTTOM + FILE_SIZE_IN_BLKS_LW)
+FILE_TOP_UW	equ	(FAT16_DATA_AREA_LBA_UW_EFFECTIVE_BOTTOM + FILE_SIZE_IN_BLKS_UW)
+;*****************************************************************************
+load_lba_block:
+    call   test_lba_block_in_payload_range
+    test   r0, 1
+    jz     @f
+    call   load_physical_lba_block ; this was a payload block
+    ret	; and so we're done here.
+@@: ; Or, well, not:
     ;; MBR:
     cmp    w[actual_lba_lw], MBR_BLOCK_LBA_LW
     jne    @f
@@ -271,8 +286,14 @@ build_fat16_boot_block:
 ;; Save LBA block
 ;*****************************************************************************
 save_lba_block:
-    call   dbg_print_write_block_index
-    ;; ...
+    call   test_lba_block_in_payload_range
+    test   r0, 1
+    jz     @f
+    ;; this was a payload block:
+    call   save_physical_lba_block
+    ret	; and so we're done here.
+@@:
+    ;; don't do anything for non-payload blocks...
     ret
 ;*****************************************************************************
 
