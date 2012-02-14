@@ -289,7 +289,6 @@ dbg_print_write_block_index:
     mov	   r0, 0x0057		; W
 @@:
     call   dbg_putchar
-    call   print_newline
     mov	   r0, 0x0042		; B
     call   dbg_putchar   
     mov	   r0, 0x003D		; =

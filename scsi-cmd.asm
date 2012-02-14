@@ -56,22 +56,6 @@ SCSI_handle_cmd:
     mov    r1, b[r11]                  ; aiCDBLen[bGroupCode]
     cmp    b[CBW_cb_length], r1	       ; if (CDBLen < aiCDBLen[bGroupCode])
     jb     bad_scsi_cmd		       ; return NULL (bad cmd)
-
-    ;; ------------------------------------
-    push   r1
-    push   r0
-    mov	   r0, 0x0048		; H
-    call   dbg_putchar
-    mov	   r0, 0x003D		; =
-    call   dbg_putchar
-    xor    r1, r1
-    mov    r1, b[Common_SCSI_CDB_op_code]
-    call   print_hex_byte
-    call   print_newline
-    pop    r0
-    pop    r1
-    ;; ------------------------------------
-    
     xor    r0, r0
     mov    r0, b[Common_SCSI_CDB_op_code]
     cmp    r0, SCSI_CMD_TEST_UNIT_READY
@@ -168,7 +152,7 @@ SCSI_command_read_10:
 SCSI_command_write_6:
     jmp    scsi_cmd_not_implemented ;;;;;; NOT IMPLEMENTED YET ;;;;;;
     ret
-SCSI_command_write_10: ;; write returns nothing, AFAIK...
+SCSI_command_write_10:
     ;; Calculate response length: BLOCKSIZE will always be 512
     xor    r0, r0 ; will be lower word of rsplen
     xor    r1, r1 ; will be upper word of rsplen
@@ -182,15 +166,7 @@ SCSI_command_write_10: ;; write returns nothing, AFAIK...
     ;; now, rsplen = dwLen * 512
     mov    w[response_length_lw], r0
     mov    w[response_length_uw], r1
-
-    
-    mov    b[dev_in_flag], 0x00
-
-    push   r0
-    mov	   r0, 0x0051		; Q
-    call   dbg_putchar
-    pop    r0
-    
+    mov    b[dev_in_flag], 0x00	; switch comm. direction
     ret
 SCSI_command_verify_10:
     jmp    scsi_cmd_not_implemented ;;;;;; NOT IMPLEMENTED YET ;;;;;;
@@ -367,7 +343,7 @@ SCSI_data_cmd_write_10:
 
     ;; now save:
     call   save_lba_block ;; if (dwBufPos == 0) then write new block:
-
+@@:
     ;; Because we want to write a *finished* block once it finishes.
     ret
 SCSI_data_cmd_verify_10: ;; nothing happens

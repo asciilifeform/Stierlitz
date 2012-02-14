@@ -126,9 +126,9 @@ Debug_UW	dw	0x0000
 ;*****************************************************************************
 dbg_print_32bit:
     int    PUSHALL_INT
+    call   print_newline
     mov	   r0, w[Debug_Title]
     call   dbg_putchar
-    call   print_newline
     mov	   r0, 0x003D		; =
     call   dbg_putchar
     mov    r1, w[Debug_UW]

@@ -61,8 +61,10 @@ scsi_rx_state_jmp_table:
     dw     do_rx_state_stalled
     ;; ------------------------
 do_rx_state_CBW:
+    mov    w[usbrecv_addr], cbw_receive_buffer
     mov    w[usbrecv_len], CBW_Size	; how many bytes to receive
     call   usb_receive_data	; read CBW from host Bulk OUT endpoint
+    
     ;; Check for valid CBW:
     cmp    r0, 0		; how many bytes (of 31) failed to read?
     jne    invalid_cbw		; if any unread bytes, invalid.
@@ -102,26 +104,11 @@ valid_cbw:
     cmp    b[cmd_must_stall_flag], 0x01
     jne    @f
     ;; if (pbData == NULL)
-
-    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-    push   r0
-    mov	   r0, 0x0031		; 1
-    call   dbg_putchar
-    pop    r0
-    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-    
     call   stall_transfer
     mov    r0, CSW_CMD_FAILED
     call   send_csw
     ret
 @@:
-    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-    push   r0
-    mov	   r0, 0x0032		; 2
-    call   dbg_putchar
-    pop    r0
-    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
     ;; if device and host disagree on direction, send Phase Error status.
     cmp    w[response_length_uw], 0
     jne    yes_response
@@ -134,14 +121,6 @@ yes_response:
     xor    r0, b[dev_in_flag]
     jz     no_disagree
     ;; && ((fHostIn && !fDevIn) || (!fHostIn && fDevIn)) then:
-
-    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-    push   r0
-    mov	   r0, 0x0033		; 3
-    call   dbg_putchar
-    pop    r0
-    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
     call   stall_transfer
     mov    r0, CSW_PHASE_ERROR
     call   send_csw
@@ -156,36 +135,14 @@ no_disagree:
     call   subtract_16
     jnc    @f	  ; If result < 0?
     ;; if (iLen > CBW.dwCBWDataTransferLength) then: negative residue
-
-    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-    push   r0
-    mov	   r0, 0x0034		; 4
-    call   dbg_putchar
-    pop    r0
-    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-    
     call   stall_transfer
     mov    r0, CSW_PHASE_ERROR
     call   send_csw
     ret
 @@:
-
-    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-    push   r0
-    mov	   r0, 0x0035		; 5
-    call   dbg_putchar
-    pop    r0
-    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
     ;; dwTransferSize = iLen
     mov    w[dwTransferSize_lw], w[response_length_lw]
     mov    w[dwTransferSize_uw], w[response_length_uw]
-
-    ;; mov	   w[Debug_Title], 0x54 ; T
-    ;; mov    w[Debug_UW], w[dwTransferSize_uw]
-    ;; mov    w[Debug_LW], w[dwTransferSize_lw]
-    ;; call   dbg_print_32bit
-
     ;; if ((dwTransferSize == 0) || fDevIn)
     cmp    w[dwTransferSize_lw], 0x0000
     jne    @f
@@ -193,52 +150,16 @@ no_disagree:
     jne    @f
     jmp    device_to_host
 @@: ;; else, host to device:
-
-    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-    push   r0
-    mov	   r0, 0x0036		; 6
-    call   dbg_putchar
-    pop    r0
-    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-    ;; cmp    b[dev_in_flag], 0x01
-    ;; je     device_to_host
     test   b[dev_in_flag], 1
     jnz    device_to_host
-
-    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-    push   r0
-    mov	   r0, 0x0037		; 7
-    call   dbg_putchar
-    pop    r0
-    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-    
     ;; otherwise, data from host to device:
     mov    b[scsi_state], SCSI_state_data_out
     ret
 device_to_host:
-
-    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-    push   r0
-    mov	   r0, 0x0038		; 8
-    call   dbg_putchar
-    pop    r0
-    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-
     mov    b[scsi_state], SCSI_state_data_in
     call   handle_data_in
     ret
 do_rx_state_data_out:
-
-    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-    push   r0
-    mov	   r0, 0x0039		; 9
-    call   dbg_putchar
-    pop    r0
-    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-
     call   handle_data_out
     ret
 do_rx_state_data_in:
@@ -248,15 +169,6 @@ do_rx_state_CSW:
     ;; mov    b[scsi_state], SCSI_state_CBW
     ret
 do_rx_state_stalled:
-
-    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-    push   r0
-    mov	   r0, 0x0039		; 9
-    call   dbg_putchar
-    pop    r0
-    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-
     call   stall_bulk_out_ep ; if stalled, keep stalling:
     ret
 ;*****************************************************************************
@@ -345,7 +257,7 @@ set_stall_bit: ; Stall the endpoint:
 ;; argument: r0 = bStatus
 ;*****************************************************************************
 send_csw:
-    and    r0, 0xFF
+    and    r0, 0x00FF
     mov    b[CSW_status], r0
     mov    w[MSC_CSW_Signature_lw], CSW_Signature_lw_expected ; signature lower word
     mov    w[MSC_CSW_Signature_uw], CSW_Signature_uw_expected ; signature upper word

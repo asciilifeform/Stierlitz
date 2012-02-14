@@ -101,7 +101,7 @@ bulk_send:
 
 
 ;*****************************************************************************
-; Receive usbrecv_length bytes of data from Bulk OUT endpoint into receive_buffer.
+; Receive usbrecv_length bytes of data from Bulk OUT endpoint into usbrecv_addr.
 ; r0 will equal number of bytes NOT received.
 ;*****************************************************************************
 ;; rx_spin_lock			db 0x00
@@ -110,7 +110,7 @@ align 2
 usb_receive_data:
     ;; mov    b[rx_spin_lock], 1
     mov    w[usbrecv_link], 0
-    mov    w[usbrecv_addr], receive_buffer
+    ;; mov    w[usbrecv_addr], receive_buffer
     mov    w[usbrecv_call], receiver_done
 usb_rx:
     mov    r8, usbrecv_link	; pointer to linker
