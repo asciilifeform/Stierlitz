@@ -22,19 +22,42 @@
 ;; Knobs
 ;*****************************************************************************
 
+;*****************************************************************************
+;; The Payload (Virtual File)
+;*****************************************************************************
+FILE_SIZE_LW		equ	0x0000
+FILE_SIZE_UW		equ	0x0010
+
+;; QTASM is Retarded...:
+FILE_SIZE_IN_BLKS_LW	equ	0x0800
+FILE_SIZE_IN_BLKS_UW	equ	0x0000
+
+FAKE_FILE_CLUSTERS	equ	32 ; 1 meg
+;*****************************************************************************
+
+
+;*****************************************************************************
+;; Other: no need to change these much
+;*****************************************************************************
 FW_REV      		equ 	0x1       ; Firmware revision
 VENDOR_ID   		equ 	0x08EC    ; "M-Systems Flash Disk"
 PRODUCT_ID  		equ 	0x0020    ; "TravelDrive"
 
-MAXBLOCK		equ	2097151 ; Index of last block (NOT block count!)
+;; MAXBLOCK		equ	2097151 ; Index of last block (NOT block count!)
+MAXBLOCK		equ	4194303 ; Index of last block (NOT block count!)
+
 ;; Because QTASM is braindead:
 MAXBLOCK_3		equ	0x00
-MAXBLOCK_2		equ	0x1F
+MAXBLOCK_2		equ	0x3F ; was: 1F (for 1GB)
 MAXBLOCK_1		equ	0xFF
 MAXBLOCK_0		equ	0xFF
+;*****************************************************************************
 
+
+;*****************************************************************************
+;; Really shouldn't change this
+;*****************************************************************************
 USB_VER			equ     0x0110 ; 0x0110 for USB 1.1; 0x0200 for USB 2.0
-
 ;; Endpoints:
 EP_IN			equ	0x01 ; 0x81 (ep1)
 EP_OUT			equ	0x02 ; 0x02 (ep2)

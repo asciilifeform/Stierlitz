@@ -181,9 +181,9 @@ build_fat16_fat:
 ;*****************************************************************************
 ;; FAT16 Root Directory
 ;*****************************************************************************
-;; TODO:
-;; Looks like Linux actually tries to write access dates here...
-;; .................................... but only on unmount.
+;; Note: Linux actually tries to write access dates here, upon sync.
+;; But we don't care. There is no good reason to waste EEPROM write cycles
+;; only to store such garbage. The FAT16 bookkeeping will be kept constant.
 ;*****************************************************************************
 align 2
 fat16_root_dir_data:
@@ -207,7 +207,7 @@ fat16_root_dir_data:
 	;; *****************************************************************
         ;; The File itself
         ;; *****************************************************************
-    	db      'STIRLITZBIN' ; Volume Label (8 chars body + 3 chars ext)
+    	db      'LOPERIMGBIN' ; Volume Label (8 chars body + 3 chars ext)
 	db	0x20   ; Attrib = 0x20 ("Archive")
 	dw	0x0000 ; b. 12 - n/a; b. 13 - creation time (10th of secs)
 	dw	0x0000 ; 14, 15: creation time (hours, minutes, seconds)
