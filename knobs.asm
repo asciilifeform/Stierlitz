@@ -42,6 +42,6 @@ EP_OUT			equ	0x02 ; 0x02 (ep2)
 EP_IN_ADDR		equ	0x81
 EP_OUT_ADDR		equ	0x02
 USB_PACKET_SIZE		equ     0x0040 ; 64 bytes
-EP_IN_BINTERVAL		equ	0x01
-EP_OUT_BINTERVAL	equ	0xFF
+EP_IN_BINTERVAL		equ	0x00
+EP_OUT_BINTERVAL	equ	0x00
 ;*****************************************************************************

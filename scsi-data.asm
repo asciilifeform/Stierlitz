@@ -8,9 +8,24 @@ align 2
 ; Handle SCSI Data Out. (Host to Device)
 ;*****************************************************************************
 handle_data_out:
-    mov	   r0, 0x0058		; X
-    call   dbg_putchar
+    ;; mov	   r0, 0x0058		; X
+    ;; call   dbg_putchar
 
+    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+    ;; call print_newline
+    ;; mov w[Debug_Title], 0x54 ; T
+    ;; mov w[Debug_LW], w[dwTransferSize_lw]
+    ;; mov w[Debug_UW], w[dwTransferSize_uw]
+    ;; call dbg_print_32bit
+    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+    ;; call print_newline
+    ;; mov w[Debug_Title], 0x4F ; O
+    ;; mov w[Debug_LW], w[dwOffset_lw]
+    ;; mov w[Debug_UW], w[dwOffset_uw]
+    ;; call dbg_print_32bit
+    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
     mov    w[iChunk], USB_PACKET_SIZE ; start with 64
     
@@ -20,7 +35,9 @@ handle_data_out:
     mov    r3, w[dwOffset_uw] ; R3:R2 = dwOffset
     ;; R1:R0 - R3:R2
     call   subtract_16
-    jc     no_data_out ; if carry, then dwOffset > dwTransferSize
+    
+    ;; jc     no_data_out ; if carry, then dwOffset > dwTransferSize
+    
     ;; if (dwOffset < dwTransferSize)
     ;; iChunk = USBHwEPRead(bulk_out_ep, pbData, dwTransferSize - dwOffset)
     ;; r0 already = dwTransferSize - dwOffset
@@ -35,27 +52,7 @@ handle_data_out:
     mov    r0, w[iChunk] ; number of bytes to receive from bulk_out_ep
     mov    w[usbrecv_len], r0 ; how many bytes to receive
     mov    w[usbrecv_addr], block_receive_buffer ; into Block buffer!
-
-    ;; !!!!!!!!!!!!!!!!!!!!!
-    ;; int    PUSHALL_INT
-    ;; call   print_newline
-    ;; mov	   r0, 0x004C		; L
-    ;; call   dbg_putchar
-    ;; mov	   r0, 0x003D		; =
-    ;; call   dbg_putchar
-    ;; mov    r1, w[iChunk]
-    ;; shr    r1, 8
-    ;; and    r1, 0xFF
-    ;; call   print_hex_byte
-    ;; mov    r1, w[iChunk]
-    ;; and    r1, 0xFF
-    ;; call   print_hex_byte
-    ;; int    POPALL_INT
-    ;; !!!!!!!!!!!!!!!!!!!!!
-    
     call   usb_receive_data ; receive data from host
-
-    
     call   SCSI_handle_data
     cmp    b[dat_must_stall_flag], 0x01
     jne    @f
@@ -139,22 +136,6 @@ handle_data_in:
     cmp    w[dwOffset_uw], w[dwTransferSize_uw]
     jne    data_in_done
     ;; if (dwOffset == dwTransferSize)
-
-    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-    ;; call print_newline
-    ;; mov w[Debug_Title], 0x54 ; T
-    ;; mov w[Debug_LW], w[CBW_data_transfer_length_lw]
-    ;; mov w[Debug_UW], w[CBW_data_transfer_length_uw]
-    ;; call dbg_print_32bit
-    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-    ;; call print_newline
-    ;; mov w[Debug_Title], 0x4F ; O
-    ;; mov w[Debug_LW], w[dwOffset_lw]
-    ;; mov w[Debug_UW], w[dwOffset_uw]
-    ;; call dbg_print_32bit
-    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
     
     ;; mov    r0, w[CBW_data_transfer_length_lw]
     ;; cmp    w[dwOffset_lw], r0
