@@ -332,6 +332,7 @@ SCSI_data_cmd_write_6:
     jmp    scsi_data_cmd_not_implemented  ;;;;;; NOT IMPLEMENTED YET ;;;;;;
     ret
 SCSI_data_cmd_write_10:
+    ;; First, find out if we just started receiving a block:
     mov    r0, w[dwOffset_lw]
     and    r0, 0x01FF
     jnz    @f
@@ -346,26 +347,16 @@ SCSI_data_cmd_write_10:
     or     r3, b[Write10_SCSI_CDB_LBA_0] ;; r3 = old lba low word
     mov    w[given_lba_lw], r3
     mov    w[given_lba_uw], r4
-
-    ;; int    PUSHALL_INT
-    ;; mov    w[Debug_Title], 0x4C ; L
-    ;; mov    w[Debug_LW], w[given_lba_lw]
-    ;; mov    w[Debug_UW], w[given_lba_uw]
-    ;; call   dbg_print_32bit
-    ;; call   dbg_printspace
-    ;; mov    w[Debug_Title], 0x4F ; O
-    ;; mov    w[Debug_LW], w[dwOffset_lw]
-    ;; mov    w[Debug_UW], w[dwOffset_uw]
-    ;; call   dbg_print_32bit
-    ;; call   print_newline
-    ;; int    POPALL_INT
-
     call   compute_actual_block_index	; compute corrected index
-
-    ;; now save:
-    call   save_lba_block ;; if (dwBufPos == 0) then write new block:
+    ret
 @@:
-    ;; Because we want to write a *finished* block once it finishes.
+    ;; Did we just finish receiving a block?
+    mov    r0, w[usbrecv_addr]
+    cmp    r0, (BLOCKSIZE - USB_PACKET_SIZE)
+    jb     @f ; no. we're in mid-block.
+    ;; Yes, we did:
+    call   save_lba_block
+@@:
     ret
 SCSI_data_cmd_verify_10: ;; nothing happens
     ret

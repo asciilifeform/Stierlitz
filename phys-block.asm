@@ -52,6 +52,44 @@ save_physical_lba_block:
     mov    w[Debug_LW], w[physical_lba_lw]
     mov    w[Debug_UW], w[physical_lba_uw]
     call   dbg_print_32bit
+    mov	   r0, 0x0020		; [space]
+    call   dbg_putchar
+    ;;-------------------------------------------
+    ;; See if expected values match:
+    mov    r1, 0x0080
+    mov    r9, block_receive_buffer
+@@:
+    mov    r0, w[r9++]
+    cmp    r0, w[physical_lba_lw]
+    jne    sad_block
+    mov    r2, w[r9++]
+    cmp    r2, w[physical_lba_uw]
+    jne    sad_block
+    dec    r1
+    jnz    @b
+    ;; all ok:
+    jmp    happy_block
+sad_block:
+    mov    w[Debug_LW], r0
+    mov    w[Debug_UW], r2
+    mov	   r0, 0x004E		; N
+    call   dbg_putchar
+    mov    w[Debug_Title], 0x42 ; B
+    call   dbg_print_32bit
+    mov	   r0, 0x0020		; [space]
+    call   dbg_putchar
+    mov	   r0, 0x004E		; N
+    call   dbg_putchar
+    mov	   r0, 0x004F		; O
+    call   dbg_putchar
+    jmp    done_block
+happy_block:
+    mov	   r0, 0x004F		; O
+    call   dbg_putchar
+    mov	   r0, 0x004B		; K
+    call   dbg_putchar
+done_block:
+    ;;-------------------------------------------
     call   print_newline
     int    POPALL_INT
     ret

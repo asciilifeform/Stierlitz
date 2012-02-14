@@ -55,6 +55,11 @@ handle_data_out:
     mov    r0, w[iChunk] ; number of bytes to receive from bulk_out_ep
     mov    w[usbrecv_len], r0 ; how many bytes to receive
     mov    w[usbrecv_addr], block_receive_buffer ; into Block buffer!
+
+    mov    r0, w[dwOffset_lw] ; only need lower word of dwoffset to calculate offset into block
+    and    r0, 0x01FF ;; dwBufPos = (dwOffset & (BLOCKSIZE - 1))
+    add    w[usbrecv_addr], r0
+    
     call   usb_receive_data ; receive data from host
     call   SCSI_handle_data
     cmp    b[dat_must_stall_flag], 0x01
