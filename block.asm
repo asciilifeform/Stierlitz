@@ -92,6 +92,11 @@ load_lba_block:
     call   load_physical_lba_block ; this was a payload block
     ret	; and so we're done here.
 @@: ; Or, well, not:
+
+    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+    ;; call   dbg_print_read_block_index
+    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
     ;; What is it then?
     ;; Primary FAT:
     mov    r3, FAT16_FAT_TABLES_BLOCK_LBA_UW
