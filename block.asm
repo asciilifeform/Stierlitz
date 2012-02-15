@@ -27,6 +27,38 @@ actual_lba_uw			dw 0x0000
 
 
 ;*****************************************************************************
+;; Test if LBA block is within the given range.
+;; block is in actual_lba; range is r3:r2 to r4:r5.
+;; results: r2 is true or false.
+;;          r1:r0 is index into range (0...N)
+;*****************************************************************************
+test_lba_block_in_range:
+    mov    r1, w[actual_lba_uw]
+    mov    r0, w[actual_lba_lw]
+    call   subtract_16 ;; R1:R0 - R3:R2
+    jc     out_of_range	; below range?
+    ;; r1:r0 is now index into range, save it
+    mov    r6, r1
+    mov    r7, r0
+    mov    r1, w[actual_lba_uw]
+    mov    r0, w[actual_lba_lw]
+    mov    r3, r4 ; uw of upper bound
+    mov    r2, r5 ; lw of upper bound
+    call   subtract_16 ;; R1:R0 - R3:R2
+    jnc    out_of_range
+    ;; is in range:
+    mov    r2, 0x0001 ; True
+    jmp    blk_range_done
+out_of_range:
+    mov    r2, 0x0000 ; False
+blk_range_done:
+    mov    r1, r6
+    mov    r0, r7
+    ret
+;*****************************************************************************
+
+
+;*****************************************************************************
 ;; Test if LBA block is within the payload range.
 ;*****************************************************************************
 ;; watch out for carry (unhandled because QTASM is RETARDED ...)
@@ -35,30 +67,17 @@ FILE_TOP_LW	equ	(FAT16_DATA_AREA_LBA_LW_EFFECTIVE_BOTTOM + FILE_SIZE_IN_BLKS_LW)
 FILE_TOP_UW	equ	(FAT16_DATA_AREA_LBA_UW_EFFECTIVE_BOTTOM + FILE_SIZE_IN_BLKS_UW)
 ;*****************************************************************************
 test_lba_block_in_payload_range:
-    ;; check if below Data Area range:
-    cmp    w[actual_lba_uw], 0x0000
-    jne    @f ; if upper word of LBA != 0, then definitely NOT below range...
-    cmp    w[actual_lba_lw], FAT16_DATA_AREA_LBA_LW_EFFECTIVE_BOTTOM
-    jb     not_payload ; below range
-@@: ; not below range:
-    mov    r0, w[actual_lba_lw]
-    mov    r1, w[actual_lba_uw]
-    mov    r2, FILE_TOP_LW
-    mov    r3, FILE_TOP_UW
-    call   subtract_16 ;; R1:R0 - R3:R2
-    jnc    not_payload ; above top of range
-    ;; Otherwise... WE HAVE A WINNER!
-    mov    r0, w[actual_lba_lw]
-    mov    r1, w[actual_lba_uw]
-    mov    r2, FAT16_DATA_AREA_LBA_LW_EFFECTIVE_BOTTOM
     mov    r3, FAT16_DATA_AREA_LBA_UW_EFFECTIVE_BOTTOM
-    call   subtract_16 ;; R1:R0 - R3:R2
+    mov    r2, FAT16_DATA_AREA_LBA_LW_EFFECTIVE_BOTTOM
+    mov    r4, FILE_TOP_UW
+    mov    r5, FILE_TOP_LW
+    call   test_lba_block_in_range
+    test   r2, 1
+    jz     @f
+    mov    w[physical_lba_uw], r1
     mov    w[physical_lba_lw], r0
-    mov    w[physical_lba_uw], r3
-    mov    r0, 0x0001 ; True, and physical block index (in 0...N) was computed.
-    ret
-not_payload:
-    mov    r0, 0x0000 ; False
+@@:
+    mov    r0, r2
     ret
 ;*****************************************************************************
 
@@ -73,6 +92,29 @@ load_lba_block:
     call   load_physical_lba_block ; this was a payload block
     ret	; and so we're done here.
 @@: ; Or, well, not:
+    ;; What is it then?
+    ;; Primary FAT:
+    mov    r3, FAT16_FAT_TABLES_BLOCK_LBA_UW
+    mov    r2, FAT16_FAT_TABLES_BLOCK_LBA_LW
+    mov    r4, FAT16_FAT_TABLES_BLOCK_LBA_UW ; should work, since we are the 1st partition
+    mov    r5, (FAT16_FAT_TABLES_BLOCK_LBA_LW + FAT16_PART0_SECTORS_PER_FAT)
+    call   test_lba_block_in_range
+    test   r2, 1
+    jz     @f
+    call   build_fat16_fat ;; Build FAT
+    ret
+@@:
+    ;; Secondary FAT:
+    mov    r3, FAT16_FAT_TABLES_COPY_BLOCK_LBA_UW
+    mov    r2, FAT16_FAT_TABLES_COPY_BLOCK_LBA_LW
+    mov    r4, FAT16_FAT_TABLES_COPY_BLOCK_LBA_UW ; should work, since we are the 1st partition
+    mov    r5, (FAT16_FAT_TABLES_COPY_BLOCK_LBA_LW + FAT16_PART0_SECTORS_PER_FAT)
+    call   test_lba_block_in_range
+    test   r2, 1
+    jz     @f
+    call   build_fat16_fat ;; Build FAT
+    ret
+@@:
     ;; MBR:
     cmp    w[actual_lba_lw], MBR_BLOCK_LBA_LW
     jne    @f
@@ -87,20 +129,6 @@ load_lba_block:
     cmp    w[actual_lba_uw], FAT16_BOOT_BLOCK_LBA_UW
     jne    @f
     call   build_fat16_boot_block
-    ret
-    ;; FAT itself:
-@@: cmp    w[actual_lba_lw], FAT16_FAT_TABLES_BLOCK_LBA_LW
-    jne    @f
-    cmp    w[actual_lba_uw], FAT16_FAT_TABLES_BLOCK_LBA_UW
-    jne    @f
-    call   build_fat16_fat ;; Build FAT
-    ret
-    ;; Or, Copy of FAT. Keep PC OS from whining...
-@@: cmp    w[actual_lba_lw], FAT16_FAT_TABLES_COPY_BLOCK_LBA_LW
-    jne    @f
-    cmp    w[actual_lba_uw], FAT16_FAT_TABLES_COPY_BLOCK_LBA_UW
-    jne    @f
-    call   build_fat16_fat ;; Build FAT
     ret
     ;; Root Directory Entries:
 @@: cmp    w[actual_lba_lw], FAT16_ROOT_DIRECTORY_ENTRY_LBA_LW
@@ -177,19 +205,42 @@ build_fat16_mbr:
 ;*****************************************************************************
 align 2
 build_fat16_fat:
-    call   zap_send_buffer
+    ;; r0 contains index of FAT page to load (0...FF)
     mov    r9, send_buffer
+    and    r0, r0
+    jnz    @f
+    ;; If we were asked for the first page of the FAT:
     mov    w[r9++], 0xfff8 ; Partition Type = HDD (0xf8);
-    mov    w[r9++], 0xffff ; State = Good (0xff) - TODO: Might need to be writable for mount!
+    mov    w[r9++], 0xffff ; State = Good (0xff) - TODO: Might need to be writable for mount! <---- Should we make this dirty?
     mov    w[r9++], 0x0000 ; Cluster 0 is reserved, and its address is 2.
-    ;; There is exactly one file. Write its clusters:
     mov    r0, 0x0003 ; Number of first cluster of file
+    jmp    build_fat
+@@: ;; Not the first page:
+    mov    r1, r0
+    xor    r0, r0
+@@:
+    add    r0, 0x00FF
+    subi   r1, 1
+    jnz    @b
+    ;; now, r0 is either 3 (page 0) or 0xFF * page-index.
+build_fat:
 @@:
     addi   r0, 1
-    mov    [r9++], r0
+    mov    w[r9++], r0
     cmp    r0, (0x0003 + FAKE_FILE_CLUSTERS - 1)
-    jb     @b
-    mov    [r9++], 0xFFFF ; Now write the last cluster of file.
+    je     penult_cluster ; this was the penultimate cluster
+    cmp    r9, (send_buffer + BLOCKSIZE) ; stop if the block is full
+    je     fat_build_done
+    jmp    @b ; otherwise, keep adding cluster records.
+penult_cluster:
+    mov    w[r9++], 0xFFFF ; Now write the last cluster of file.
+    xor    r0, r0
+@@:
+    cmp    r9, (send_buffer + BLOCKSIZE) ; stop if the block is full
+    je     fat_build_done
+    mov    w[r9++], r0
+    jmp    @b
+fat_build_done:
     ret
 ;*****************************************************************************
 
