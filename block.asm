@@ -218,33 +218,33 @@ build_fat16_fat:
     mov    w[r9++], 0xfff8 ; Partition Type = HDD (0xf8);
     mov    w[r9++], 0xffff ; State = Good (0xff) - TODO: Might need to be writable for mount! <---- Should we make this dirty?
     mov    w[r9++], 0x0000 ; Cluster 0 is reserved, and its address is 2.
-    mov    r0, 0x0003 ; Number of first cluster of file
+    mov    r0, FIRST_CLUSTER_INDEX ; Number of first cluster of file
     jmp    build_fat
 @@: ;; Not the first page:
     mov    r1, r0
     xor    r0, r0
 @@:
-    add    r0, 0x00FF
+    add    r0, 0x0100
     subi   r1, 1
     jnz    @b
-    addi   r0, 1
-
+    ;; if we're past the last page?
     cmp    r0, FAKE_FILE_CLUSTERS
-    jb     @f
-    ;; if we're past the last page
+    jbe    @f
     call   zap_send_buffer
     jmp    fat_build_done
-@@:
-    ;; now, r0 is either 3 (page 0) or 0xFF * page-index.
+@@: ;; now, r0 is either 3 (page 0) or 0xFF * page-index.
+    addi   r0, 1
 build_fat:
 @@:
-    cmp    r0, (0x0003 + FAKE_FILE_CLUSTERS - 1)
+    ;; block full?
+    cmp    r9, (send_buffer + BLOCKSIZE) ; stop if the block is full
+    je     fat_build_done
+    ;; There is room:
+    cmp    r0, (FIRST_CLUSTER_INDEX + FAKE_FILE_CLUSTERS - 1)
     je     penult_cluster ; this was the penultimate cluster
     mov    w[r9++], r0
     addi   r0, 1
-    cmp    r9, (send_buffer + BLOCKSIZE) ; stop if the block is full
-    je     fat_build_done
-    jmp    @b ; otherwise, keep adding cluster records.
+    jmp    @b ; keep adding cluster records.
 penult_cluster:
     mov    w[r9++], 0xFFFF ; Now write the last cluster of file.
     xor    r0, r0

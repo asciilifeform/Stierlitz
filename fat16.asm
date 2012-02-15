@@ -18,6 +18,8 @@ FAT16_DATA_AREA_LBA_LW			equ	(FAT16_ROOT_DIRECTORY_ENTRY_LBA_LW + ((FAT16_PART0_
 ;; Now, this is because 64 blocks are taken up by Cluster 0 (reserved)
 FAT16_DATA_AREA_LBA_UW_EFFECTIVE_BOTTOM	equ	0x0000
 FAT16_DATA_AREA_LBA_LW_EFFECTIVE_BOTTOM equ	(FAT16_DATA_AREA_LBA_LW + 64)
+
+FIRST_CLUSTER_INDEX			equ	0x0004
 ;*****************************************************************************
 
 

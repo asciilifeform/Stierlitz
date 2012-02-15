@@ -59,18 +59,7 @@ mem_move:
 ; R1:R0 - R3:R2
 ;*****************************************************************************
 subtract_16:
-    push   r4
-    xor    r4, r4
     sub    r0, r2 ; Subtract the lower halves.  This may "borrow" from the upper half.
-    jnc    @f
-    mov    r4, 1
-@@:
     subb   r1, r3 ; Subtract the upper halves.
-    jc     @f	  ; Carry set from subtracting upper halves?
-    test   r4, 1  ; If not, see if carry was set from subtracting lower halves:
-    jz     @f
-    stc
-@@:
-    pop    r4
     ret
 ;*****************************************************************************

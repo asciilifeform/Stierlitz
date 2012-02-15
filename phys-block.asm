@@ -46,14 +46,14 @@ load_physical_lba_block:
 save_physical_lba_block:
     ;; right now, a test.
     int    PUSHALL_INT
-    mov	   r0, 0x0057		; W
-    call   dbg_putchar
-    mov    w[Debug_Title], 0x42 ; B
-    mov    w[Debug_LW], w[physical_lba_lw]
-    mov    w[Debug_UW], w[physical_lba_uw]
-    call   dbg_print_32bit
-    mov	   r0, 0x0020		; [space]
-    call   dbg_putchar
+    ;; mov	   r0, 0x0057		; W
+    ;; call   dbg_putchar
+    ;; mov    w[Debug_Title], 0x42 ; B
+    ;; mov    w[Debug_LW], w[physical_lba_lw]
+    ;; mov    w[Debug_UW], w[physical_lba_uw]
+    ;; call   dbg_print_32bit
+    ;; mov	   r0, 0x0020		; [space]
+    ;; call   dbg_putchar
     ;;-------------------------------------------
     ;; See if expected values match:
     mov    r1, 0x0080
@@ -83,14 +83,14 @@ sad_block:
     mov	   r0, 0x004F		; O
     call   dbg_putchar
     jmp    done_block
+    call   print_newline
 happy_block:
-    mov	   r0, 0x004F		; O
-    call   dbg_putchar
-    mov	   r0, 0x004B		; K
-    call   dbg_putchar
+    ;; mov	   r0, 0x004F		; O
+    ;; call   dbg_putchar
+    ;; mov	   r0, 0x004B		; K
+    ;; call   dbg_putchar
 done_block:
     ;;-------------------------------------------
-    call   print_newline
     int    POPALL_INT
     ret
 ;*****************************************************************************
