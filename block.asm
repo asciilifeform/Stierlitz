@@ -203,8 +203,21 @@ build_fat16_mbr:
 ;*****************************************************************************
 ;; ! QTASM IS RETARDED ! QTASM IS RETARDED ! QTASM IS RETARDED ! QTASM IS RETARDED
 ;*****************************************************************************
+
+;; TODO: why does df report that disk is full?
+
 align 2
 build_fat16_fat:
+    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+    push   r0
+    mov    r1, r0
+    and    r1, 0xFF
+    call   print_newline
+    call   print_hex_byte
+    call   print_newline
+    pop    r0
+    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+    
     ;; r0 contains index of FAT page to load (0...FF)
     mov    r9, send_buffer
     and    r0, r0
@@ -222,11 +235,12 @@ build_fat16_fat:
     add    r0, 0x00FF
     subi   r1, 1
     jnz    @b
+    addi   r0, 1
     ;; now, r0 is either 3 (page 0) or 0xFF * page-index.
 build_fat:
 @@:
-    addi   r0, 1
     mov    w[r9++], r0
+    addi   r0, 1
     cmp    r0, (0x0003 + FAKE_FILE_CLUSTERS - 1)
     je     penult_cluster ; this was the penultimate cluster
     cmp    r9, (send_buffer + BLOCKSIZE) ; stop if the block is full
