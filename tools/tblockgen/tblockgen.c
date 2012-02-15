@@ -11,8 +11,16 @@ void printusage(int argc, char *argv[]) {
 
 void make_block(unsigned int i, char *block) {
   int j;
+  /*
   for (j = 0; j < BLOCKSIZE; j += 16) {
     sprintf(block + j, "%16d", i);
+  }
+  */
+  for (j = 0; j < BLOCKSIZE; j += 4) {
+    block[j] = (unsigned char)(i & 0xFF);
+    block[j + 1] = (unsigned char)((i & 0xFF00) >> 8);
+    block[j + 2] = (unsigned char)((i & 0xFF0000) >> 16);
+    block[j + 3] = (unsigned char)((i & 0xFF000000) >> 32);
   }
 }
 

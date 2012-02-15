@@ -154,8 +154,7 @@ save_lba_block:
     ;; this was a payload block:
     call   save_physical_lba_block
     ret	; and so we're done here.
-@@:
-    ;; don't do anything for non-payload blocks...
+@@: ;; don't do anything for non-payload blocks...
     ret
 ;*****************************************************************************
 
@@ -204,20 +203,8 @@ build_fat16_mbr:
 ;; ! QTASM IS RETARDED ! QTASM IS RETARDED ! QTASM IS RETARDED ! QTASM IS RETARDED
 ;*****************************************************************************
 
-;; TODO: why does df report that disk is full?
-
 align 2
 build_fat16_fat:
-    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-    push   r0
-    mov    r1, r0
-    and    r1, 0xFF
-    call   print_newline
-    call   print_hex_byte
-    call   print_newline
-    pop    r0
-    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-    
     ;; r0 contains index of FAT page to load (0...FF)
     mov    r9, send_buffer
     and    r0, r0
@@ -236,13 +223,20 @@ build_fat16_fat:
     subi   r1, 1
     jnz    @b
     addi   r0, 1
+
+    cmp    r0, FAKE_FILE_CLUSTERS
+    jb     @f
+    ;; if we're past the last page
+    call   zap_send_buffer
+    jmp    fat_build_done
+@@:
     ;; now, r0 is either 3 (page 0) or 0xFF * page-index.
 build_fat:
 @@:
-    mov    w[r9++], r0
-    addi   r0, 1
     cmp    r0, (0x0003 + FAKE_FILE_CLUSTERS - 1)
     je     penult_cluster ; this was the penultimate cluster
+    mov    w[r9++], r0
+    addi   r0, 1
     cmp    r9, (send_buffer + BLOCKSIZE) ; stop if the block is full
     je     fat_build_done
     jmp    @b ; otherwise, keep adding cluster records.
