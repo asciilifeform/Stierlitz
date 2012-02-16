@@ -136,6 +136,7 @@ include util.asm
 include scsi-data.asm
 include scsi-cmd.asm
 include block.asm
+include hpi.asm
 include payload.asm
 include scsi-state.asm
 include descriptor.asm
