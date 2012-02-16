@@ -93,8 +93,5 @@ module stierlitz_demo_top
 			    .splat(hpi_manual_test)
 			    );
    
-			    
-   
-   
-ndmodule
-
+  
+endmodule

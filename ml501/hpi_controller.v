@@ -155,5 +155,4 @@ module hpi_controller
 		 st = STATE_IDLE;
 	      end
        end
-
 endmodule
