@@ -27,6 +27,7 @@
 ;; Replace stock vectors
 ;*****************************************************************************
 ;; save bios handlers here:
+bios_standard_usb_reset_handler dw	0xDEAD
 bios_standard_request_handler:	dw	0xDEAD
 bios_class_request_handler: 	dw	0xDEAD
 bios_configuration_change:  	dw	0xDEAD
@@ -35,6 +36,9 @@ bios_ep1_in_isr:    		dw	0xDEAD
 bios_ep2_out_isr:   		dw	0xDEAD
 ;*****************************************************************************
 insert_vectors:
+    ; Update USB reset handler.
+    mov    [bios_standard_usb_reset_handler], [SIE2_SLAVE_RESET_VEC]
+    mov    [SIE2_SLAVE_RESET_VEC], my_standard_usb_reset_handler
     ; Update BIOS SIE2 descriptor pointers.
     mov    [SUSB2_DEV_DESC_VEC], dev_desc
     mov    [SUSB2_CONFIG_DESC_VEC], conf_desc
@@ -54,6 +58,36 @@ insert_vectors:
     mov    w[SIE2_EP2_VEC], my_ep2_out_vec
     ret
 ;*****************************************************************************
+
+
+;*****************************************************************************
+;; USB reset handler.
+;*****************************************************************************
+my_standard_usb_reset_handler:
+    test   b[main_enable], 1
+    jz     @f
+    call   warm_boot
+@@:
+    call   [bios_standard_usb_reset_handler]
+    ret
+;*****************************************************************************    
+
+
+;*****************************************************************************
+;; Warm reboot.
+;*****************************************************************************
+warm_boot:
+    ;; mov	   r0, 0x0021		; !
+    ;; call   dbg_putchar
+    mov    b[main_enable], 0x00
+    mov    b[conf_count], 0x00
+    mov    b[main_lock], 0
+    ;; reset hack
+    jmpl   0xE000
+wd_hang:
+    jmp    wd_hang
+    ; should never get here...
+;*****************************************************************************    
 
 
 ;*****************************************************************************
@@ -167,6 +201,10 @@ my_configuration_change:
     jb     @f
     
     mov    [main_enable], 1 ; we want to enable self when configured
+
+    ;; mov	   r0, 0x002B		; +
+    ;; call   dbg_putchar
+    
 @@:
     int    POPALL_INT
     pop    [CPU_FLAGS_REG]	; push flags register

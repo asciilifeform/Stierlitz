@@ -79,10 +79,12 @@ init_code:
 
     call   insert_vectors ; Overwrite stock ISRs
 
+    ;;DEBUG;;
     call   print_newline
     mov	   r0, 0x002A		; *
     call   dbg_putchar
-
+    ;;DEBUG;;
+    
     ;; init:
     xor    r1, r1		; full speed
     mov    r2, 2		; SIE2
