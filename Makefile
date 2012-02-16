@@ -1,6 +1,6 @@
 ASM = qtasm/qtasm.exe
 WINE = wine
-BURNER = ./ezotgdbg
+BURNER = ezotgdbg
 BIN = stierlitz
 
 all :	$(BIN)

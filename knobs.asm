@@ -36,18 +36,19 @@
 ;; FAKE_FILE_CLUSTERS	equ	32768
 
 ;;;;;;;;;;;;; 256 meg
-FILE_SIZE_LW		equ	0x0000
-FILE_SIZE_UW		equ	0x1000
-FILE_SIZE_IN_BLKS_LW	equ	0x0000
-FILE_SIZE_IN_BLKS_UW	equ	0x0008
-FAKE_FILE_CLUSTERS	equ	8192
+;; FILE_SIZE_LW		equ	0x0000
+;; FILE_SIZE_UW		equ	0x1000
+;; FILE_SIZE_IN_BLKS_LW	equ	0x0000
+;; FILE_SIZE_IN_BLKS_UW	equ	0x0008
+;; FAKE_FILE_CLUSTERS	equ	8192
 
 ;;;;;;;;;;;;; 1 meg
-;; FILE_SIZE_LW		equ	0x0000
-;; FILE_SIZE_UW		equ	0x0010
-;; FILE_SIZE_IN_BLKS_LW	equ	0x0800
-;; FILE_SIZE_IN_BLKS_UW	equ	0x0000
-;; FAKE_FILE_CLUSTERS	equ	32
+FILE_SIZE_LW		equ	0x0000
+FILE_SIZE_UW		equ	0x0010
+FILE_SIZE_IN_BLKS_LW	equ	0x0800
+FILE_SIZE_IN_BLKS_UW	equ	0x0000
+FAKE_FILE_CLUSTERS	equ	32
+
 ;*****************************************************************************
 
 
