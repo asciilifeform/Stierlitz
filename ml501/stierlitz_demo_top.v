@@ -67,11 +67,27 @@ module stierlitz_demo_top
    wire 	usbreset = CBUTTON | ~sys_rst_pin; /* tie rst to main rst */
    assign usb_hpi_reset_n = ~usbreset;
 
-   /* 32 MHz (x4) clock for HPI interface */
+   /* 16 MHz (x2) clock for HPI interface */
    wire 	hpi_clock;
-   DCM hpi_clock_dcm (.CLKIN(sys_clk), .CLKFX(hpi_clock));
-   defparam hpi_clock_dcm.CLKFX_MULTIPLY = 8;
-   defparam hpi_clock_dcm.CLKFX_DIVIDE = 25;
+
+   reg [2:0] 	clkdiv;
+   always @(posedge sys_clk, posedge usbreset)
+     if (usbreset)
+       begin
+	  clkdiv <= 0;
+       end
+     else
+       begin
+	  clkdiv <= clkdiv + 1;
+       end
+   assign hpi_clock = clkdiv[2];
+   
+   // DCM hpi_clock_dcm (.CLKIN(sys_clk),
+   // 		      .CLKFX(hpi_clock),
+   // 		      .RST(sys_rst_pin)
+   // 		      );
+   // defparam hpi_clock_dcm.CLKFX_MULTIPLY = 4;
+   // defparam hpi_clock_dcm.CLKFX_DIVIDE = 25;
 
    assign sace_mpce = 1; /* Switch off ACE to free the bus it shares with CY */
 

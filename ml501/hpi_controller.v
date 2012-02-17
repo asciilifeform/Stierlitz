@@ -46,20 +46,21 @@ module hpi_controller
      HPI_REG_STATUS = 2'b11;   /* R */
 
    /* States for FSM */
-   localparam [1:0]
+   localparam [2:0]
      STATE_IDLE = 0,
-     STATE_SET_ADDR_REG, = 1,
-     STATE_ADDRESS_WRITE = 2,
-     STATE_DATA_WRITE = 3;
+     STATE_AD1 = 1,
+     STATE_AD2 = 2,
+     STATE_RD1 = 3,
+     STATE_RD2 = 4,
+     STATE_WR1 = 5,
+     STATE_WR2 = 6;
    
-     
 
-     
    /****************************************/
    input 	     splat; /* For testing */
    /****************************************/
    
-   input clk; /* 32MHz (4x max HPI freq.) */
+   input clk; /* 16MHz (2x max HPI freq.) */
    input reset; /* Active-high */
    
    output wire [1:0] hpi_address;
@@ -75,45 +76,23 @@ module hpi_controller
    reg [1:0] 	     hpi_ctl_addr_reg;
    assign hpi_address[1:0] = hpi_ctl_addr_reg;
 
-   reg 		     hpi_ctl_dir; /* HPI direction; 0: read, 1: write. */
+   reg 		     wen_reg;
+   reg 		     oen_reg;
    
+   assign hpi_wen = wen_reg;
+   assign hpi_oen = oen_reg;
+
+   // reg [15:0] 	     hpi_address_out;
+   parameter HPI_ADDRESS_OUT = 16'h1324; /* io_test */
+      
    reg [15:0] 	     hpi_data_out;
-   assign hpi_data = hpi_ctl_dir ? hpi_data_out : 16'bz;
 
-   reg [31:0] 	     foo; /* For test */
-   
-   always @(posedge clk, posedge reset, posedge splat)
-     if (reset)
-       begin
-	  foo <= 32'b0;
-       end
-     else
-       begin
-	  if (splat)
-	    begin
-	       foo <= foo + 1;
-	    end
-       end
+   assign hpi_data = hpi_wen ? hpi_data_out : 16'bz;
 
-   reg [23:0] tmr;
-   wire       one_hz;
-   assign one_hz = tmr[23];
-
-   wire       eight_mhz; /* Max data rate */
-   assign eight_mhz = tmr[2];
-
-   reg [1:0] st; /* FSM */
-
-   wire      idling;
-   assign idling = (st == STATE_IDLE);
-   
-   /* write if not reading */
-   assign hpi_wen = (~hpi_ctl_dir) && eight_mhz && (~idling);
-
-   /* read is already active-low */
-   assign hpi_oen = hpi_ctl_dir && eight_mhz && (~idling);
+   reg [15:0] 	     hpi_data_in;
 
    
+   reg [22:0] tmr;   
    always @(posedge clk, posedge reset)
      if (reset)
        begin
@@ -123,11 +102,23 @@ module hpi_controller
        begin
 	  tmr <= tmr + 1;
        end
+   // wire       one_hz;
+   // assign one_hz = tmr[22];
+
+   wire [15:0] test_data_out = tmr[15:0];
    
+   
+   wire       rw; /* high=write low=read */
+
+   assign rw = 1; /* write test */
+
+   reg [2:0] st; /* FSM */
+  
    always @(posedge clk, posedge reset)
      if (reset)
        begin
-	  hpi_ctl_dir <= 0; /* Tristate the HPI bus on reset */
+	  wen_reg <= 1;
+	  oen_reg <= 1;
 	  hpi_ctl_addr_reg <= HPI_REG_STATUS;
 	  st = STATE_IDLE;
        end
@@ -136,23 +127,52 @@ module hpi_controller
 	  case (st)
 	    STATE_IDLE:
 	      begin
-		 hpi_ctl_dir <= 0;
-		 st = one_hz ? STATE_SET_ADDR_REG ? STATE_IDLE;
+		 hpi_ctl_addr_reg <= HPI_REG_STATUS;
+		 wen_reg <= 1;
+		 oen_reg <= 1;
+		 st = splat ? STATE_AD1 : STATE_IDLE;
 	      end
-	    STATE_SET_ADDR_REG:
+	    STATE_AD1:
 	      begin
 		 hpi_ctl_addr_reg <= HPI_REG_ADDRESS;
-		 hpi_ctl_dir <= 1; /* Write */
-		 st = STATE_ADDRESS_WRITE;
+		 hpi_data_out <= HPI_ADDRESS_OUT;
+		 wen_reg <= 0;
+		 st = STATE_AD2;
 	      end
-	    STATE_ADDRESS_WRITE:
+	    STATE_AD2:
 	      begin
-		 
-		 st = STATE_DATA_WRITE;
+		 wen_reg <= 1;
+		 st = rw ? STATE_WR1 : STATE_RD1;
 	      end
-	    STATE_DATA_WRITE:
+	    STATE_RD1:
 	      begin
+		 hpi_ctl_addr_reg <= HPI_REG_DATA;
+		 oen_reg <= 0;
+		 st = STATE_RD2;
+	      end
+	    STATE_RD2:
+	      begin
+		 hpi_data_in <= hpi_data;
 		 st = STATE_IDLE;
 	      end
+	    STATE_WR1:
+	      begin
+		 hpi_ctl_addr_reg <= HPI_REG_DATA;
+		 hpi_data_out <= test_data_out;
+		 wen_reg <= 0;
+		 st = STATE_WR2;
+	      end
+	    STATE_WR2:
+	      begin
+		 wen_reg <= 1;
+		 st = STATE_IDLE;
+	      end
+	    default:
+	      begin
+		 wen_reg <= 1;
+		 oen_reg <= 1;
+		 st = STATE_IDLE;
+	      end
+	  endcase
        end
 endmodule
