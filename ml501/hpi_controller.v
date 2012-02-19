@@ -34,7 +34,8 @@ module hpi_controller
    hpi_irq,
    hpi_resetn,
    /* Control */
-   splat
+   splat,
+   test_out
    /* ... */
    );
 
@@ -50,10 +51,21 @@ module hpi_controller
      STATE_IDLE = 0,
      STATE_AD1 = 1,
      STATE_AD2 = 2,
-     STATE_RD1 = 3,
-     STATE_RD2 = 4,
-     STATE_WR1 = 5,
-     STATE_WR2 = 6;
+     STATE_AD3 = 3,
+     STATE_WR1 = 4,
+     STATE_WR2 = 5,
+     STATE_WR3 = 6;
+
+
+   // localparam [2:0]
+   //   STATE_IDLE = 0,
+   //   STATE_A = 1,
+   //   STATE_B = 2,
+   //   STATE_C = 3,
+   //   STATE_D = 4,
+   //   STATE_E = 5,
+   //   STATE_F = 6,
+   //   STATE_G = 7;
    
 
    /****************************************/
@@ -71,108 +83,166 @@ module hpi_controller
    input wire 	     hpi_irq;
    output wire 	     hpi_resetn;
 
+   output wire [7:0] test_out;
+    
+
+   assign hpi_resetn = ~reset; /* reset with FPGA */
+   
    assign hpi_csn = 0; /* For now, pretend ACE doesn't exist */
    
    reg [1:0] 	     hpi_ctl_addr_reg;
-   assign hpi_address[1:0] = hpi_ctl_addr_reg;
+   assign hpi_address[1:0] = hpi_ctl_addr_reg[1:0];
 
    reg 		     wen_reg;
    reg 		     oen_reg;
    
    assign hpi_wen = wen_reg;
-   assign hpi_oen = oen_reg;
+
+   // assign hpi_oen = oen_reg;
+   assign hpi_oen = 1;
+   
 
    // reg [15:0] 	     hpi_address_out;
    parameter HPI_ADDRESS_OUT = 16'h1324; /* io_test */
-      
+   // parameter HPI_ADDRESS_OUT = 16'h0500; /* io_test */
+   
    reg [15:0] 	     hpi_data_out;
-
-   assign hpi_data = hpi_wen ? hpi_data_out : 16'bz;
 
    reg [15:0] 	     hpi_data_in;
 
-   
-   reg [22:0] tmr;   
-   always @(posedge clk, posedge reset)
-     if (reset)
-       begin
-	  tmr <= 0;
-       end
-     else
-       begin
-	  tmr <= tmr + 1;
-       end
-   // wire       one_hz;
-   // assign one_hz = tmr[22];
+   assign test_out = hpi_data_in[7:0];
 
-   wire [15:0] test_data_out = tmr[15:0];
-   
-   
-   wire       rw; /* high=write low=read */
 
-   assign rw = 1; /* write test */
+   reg 		     tris;
+      
+   assign hpi_data = tris ? 16'bz : hpi_data_out;
+   // assign hpi_data = hpi_data_out;
+   
+   // assign hpi_data = 16'bz;
+   
+   // reg [15:0] 	     hpi_data_in;
+   // wire       rw; /* high=write low=read */
+   // assign rw = 1; /* write test */
 
    reg [2:0] st; /* FSM */
+
+   // always @(posedge clk, posedge reset)
+   //   if (reset)
+   //     begin
+   // 	  hpi_data_in <= 0;
+   // 	  wen_reg <= 1;
+   // 	  oen_reg <= 1;
+   // 	  tris <= 1;
+   // 	  st = STATE_IDLE;
+   //     end
+   //   else
+   //     begin
+   // 	  case (st)
+   // 	    STATE_IDLE:
+   // 	      begin
+   // 		 tris <= 0;
+   // 		 hpi_ctl_addr_reg <= HPI_REG_ADDRESS;
+   // 		 hpi_data_out <= HPI_ADDRESS_OUT;
+   // 		 wen_reg <= 1;
+   // 		 oen_reg <= 1;
+   // 		 st = splat ? STATE_A : STATE_IDLE;
+   // 	      end
+   // 	    STATE_A:
+   // 	      begin
+   // 		 wen_reg <= 0;
+   // 		 st = STATE_B;
+   // 	      end
+   // 	    STATE_B:
+   // 	      begin
+   // 		 wen_reg <= 1;
+   // 		 st = STATE_C;
+   // 	      end
+   // 	    STATE_C:
+   // 	      begin
+   // 		 tris <= 1;
+   // 		 st = STATE_D;
+   // 	      end
+   // 	    STATE_D:
+   // 	      begin
+   // 		 hpi_ctl_addr_reg <= HPI_REG_DATA;
+   // 		 st = STATE_E;
+   // 	      end
+   // 	    STATE_E:
+   // 	      begin
+   // 		 oen_reg <= 0;
+   // 		 st = STATE_F;
+   // 	      end
+   // 	    STATE_F:
+   // 	      begin
+   // 		 hpi_data_in <= hpi_data;
+   // 		 st = STATE_G;
+   // 	      end
+   // 	    STATE_G:
+   // 	      begin
+   // 		 oen_reg <= 1;
+   // 		 st = STATE_IDLE;
+   // 	      end
+   // 	    default:
+   // 	      begin
+   // 		 st = STATE_IDLE;
+   // 	      end
+   // 	  endcase
+   //     end
   
    always @(posedge clk, posedge reset)
      if (reset)
        begin
-	  wen_reg <= 1;
-	  oen_reg <= 1;
-	  hpi_ctl_addr_reg <= HPI_REG_STATUS;
-	  st = STATE_IDLE;
+	  tris <= 0;
+   	  wen_reg <= 1;
+   	  st = STATE_IDLE;
        end
      else
        begin
-	  case (st)
-	    STATE_IDLE:
-	      begin
-		 hpi_ctl_addr_reg <= HPI_REG_STATUS;
-		 wen_reg <= 1;
-		 oen_reg <= 1;
-		 st = splat ? STATE_AD1 : STATE_IDLE;
-	      end
-	    STATE_AD1:
-	      begin
-		 hpi_ctl_addr_reg <= HPI_REG_ADDRESS;
-		 hpi_data_out <= HPI_ADDRESS_OUT;
-		 wen_reg <= 0;
-		 st = STATE_AD2;
-	      end
-	    STATE_AD2:
-	      begin
-		 wen_reg <= 1;
-		 st = rw ? STATE_WR1 : STATE_RD1;
-	      end
-	    STATE_RD1:
-	      begin
-		 hpi_ctl_addr_reg <= HPI_REG_DATA;
-		 oen_reg <= 0;
-		 st = STATE_RD2;
-	      end
-	    STATE_RD2:
-	      begin
-		 hpi_data_in <= hpi_data;
-		 st = STATE_IDLE;
-	      end
-	    STATE_WR1:
-	      begin
-		 hpi_ctl_addr_reg <= HPI_REG_DATA;
-		 hpi_data_out <= test_data_out;
-		 wen_reg <= 0;
-		 st = STATE_WR2;
-	      end
-	    STATE_WR2:
-	      begin
-		 wen_reg <= 1;
-		 st = STATE_IDLE;
-	      end
-	    default:
-	      begin
-		 wen_reg <= 1;
-		 oen_reg <= 1;
-		 st = STATE_IDLE;
-	      end
-	  endcase
+   	  case (st)
+   	    STATE_IDLE:
+   	      begin
+		 tris <= 0;
+   		 hpi_ctl_addr_reg <= HPI_REG_ADDRESS;
+   		 hpi_data_out <= HPI_ADDRESS_OUT;
+   		 wen_reg <= 1;
+   		 st = splat ? STATE_AD1 : STATE_IDLE;
+   	      end
+   	    STATE_AD1:
+   	      begin
+   		 wen_reg <= 0;
+   		 st = STATE_AD2;
+   	      end
+   	    STATE_AD2:
+   	      begin
+   		 // st = rw ? STATE_WR1 : STATE_RD1;
+   		 st = STATE_AD3;
+   	      end
+   	    STATE_AD3:
+   	      begin
+   		 wen_reg <= 1;
+   		 st = STATE_WR1;
+   	      end
+   	    STATE_WR1:
+   	      begin
+   		 hpi_ctl_addr_reg <= HPI_REG_DATA;
+   		 hpi_data_out <= 16'hCAFE;
+   		 st = STATE_WR2;
+   	      end
+   	    STATE_WR2:
+   	      begin
+   		 wen_reg <= 0;
+   		 st = STATE_WR3;
+   	      end
+   	    STATE_WR3:
+   	      begin
+   		 wen_reg <= 1;
+   		 // st = splat ? STATE_WR1 : STATE_IDLE;
+   		 st = STATE_IDLE;
+   	      end
+   	    default:
+   	      begin
+   		 st = STATE_IDLE;
+   	      end
+   	  endcase
        end
-endmodule
+endmodule // hpi_controller

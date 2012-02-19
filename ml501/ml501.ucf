@@ -31,19 +31,17 @@ NET sys_rst_pin LOC = T23 | IOSTANDARD = LVCMOS33 | PULLUP;
 ## # IO Pad Location Constraints / Properties for System ACE MPU / USB
 ## #------------------------------------------------------------------------------
 
-## NET sysace_clk_in   LOC        = AB12;
-## NET sysace_clk_in   IOSTANDARD = LVCMOS33;
-## NET sysace_clk_in   TNM_NET    = "sysace_clk_in";
-## # Leave 1 ns margin
-## TIMESPEC "TSSYSACE" = PERIOD "sysace_clk_in" 29 ns;
+# NET sace_usb_a<0>   LOC        = E5;
+# NET sace_usb_a<1>   LOC        = F5;
 
 NET sace_usb_a<0>   LOC        = N6;
-NET sace_usb_a<1>   LOC        = E5;
-## NET sace_usb_a<2>   LOC        = F5;
-## NET sace_usb_a<3>   LOC        = F4;
-## NET sace_usb_a<4>   LOC        = J5;
-## NET sace_usb_a<5>   LOC        = E7;
-## NET sace_usb_a<6>   LOC        = G7;
+NET sace_usb_a<1>   LOC        = E5; # A0
+NET sace_usb_a<2>   LOC        = F5; # A1
+NET sace_usb_a<3>   LOC        = F4;
+NET sace_usb_a<4>   LOC        = J5;
+NET sace_usb_a<5>   LOC        = E7;
+NET sace_usb_a<6>   LOC        = G7;
+
 NET sace_usb_a<*>   IOSTANDARD = LVCMOS33;
 NET sace_usb_a<*>   SLEW       = FAST;
 NET sace_usb_a<*>   DRIVE      = 8;

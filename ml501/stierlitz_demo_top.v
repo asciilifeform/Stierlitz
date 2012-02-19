@@ -59,18 +59,25 @@ module stierlitz_demo_top
    output wire 	sace_usb_wen;
    output wire 	usb_csn;
    input wire  	usb_hpi_int;
-   output wire [1:0] sace_usb_a;
+   output wire [6:0] sace_usb_a;
    inout wire [15:0] sace_usb_d;
    output wire 	usb_hpi_reset_n;
-   
+
+   wire [1:0]	usb_addr;
+
+   assign sace_usb_a[2:1] = usb_addr[1:0];
+
+   assign sace_usb_a[0] = 1'bz;
+   assign sace_usb_a[6:3] = 4'bz;
+      
    /* CY manual reset */
    wire 	usbreset = CBUTTON | ~sys_rst_pin; /* tie rst to main rst */
-   assign usb_hpi_reset_n = ~usbreset;
+   // assign usb_hpi_reset_n = ~usbreset;
 
    /* 16 MHz (x2) clock for HPI interface */
    wire 	hpi_clock;
 
-   reg [2:0] 	clkdiv;
+   reg [6:0] 	clkdiv;
    always @(posedge sys_clk, posedge usbreset)
      if (usbreset)
        begin
@@ -80,7 +87,7 @@ module stierlitz_demo_top
        begin
 	  clkdiv <= clkdiv + 1;
        end
-   assign hpi_clock = clkdiv[2];
+   assign hpi_clock = clkdiv[6];
    
    // DCM hpi_clock_dcm (.CLKIN(sys_clk),
    // 		      .CLKFX(hpi_clock),
@@ -94,9 +101,22 @@ module stierlitz_demo_top
    wire 	hpi_manual_test = EBUTTON; /* temporary manual toggle to run tester */
 
    wire 	usb_irq = usb_hpi_int; /* HPI IRQ is active-high */
-   assign led_byte[0] = ~usb_irq; /* LEDs are active-high */
-   assign led_byte[7:1] = 7'b0;
+
+   // assign led_byte[7] = usb_irq; /* LEDs are active-high */
+   // assign led_byte[0] = sace_usb_a[0];
+   // assign led_byte[1] = sace_usb_a[1];
+   // assign led_byte[2] = usbreset;
+   // assign led_byte[3] = sace_usb_oen;
+   // assign led_byte[4] = sace_usb_wen;
+   // assign led_byte[5] = (sace_usb_a != 0);
+   // assign led_byte[6] = (sace_usb_d != 0);
+
+   wire [7:0] 	test_leds;
+
+   // assign led_byte[7:0] = test_leds[7:0];
+   assign led_byte[7:0] = sace_usb_d[7:0];
    
+  
    hpi_controller stierlitz(.clk(hpi_clock),
 			    .reset(usbreset),
 			    .hpi_resetn(usb_hpi_reset_n),
@@ -104,9 +124,10 @@ module stierlitz_demo_top
 			    .hpi_oen(sace_usb_oen),
 			    .hpi_wen(sace_usb_wen),
 			    .hpi_irq(usb_hpi_int),
-			    .hpi_address(sace_usb_a),
+			    .hpi_address(usb_addr),
 			    .hpi_data(sace_usb_d),
-			    .splat(hpi_manual_test)
+			    .splat(hpi_manual_test),
+			    .test_out(test_leds)
 			    );
    
   

@@ -79,6 +79,9 @@ init_code:
 
     call   insert_vectors ; Overwrite stock ISRs
 
+    ;; Enable HPI
+    mov    w[GPIO_CNTRL], GIO_IntCtl_Mode_HPIbm
+    
     ;;DEBUG;;
     call   print_newline
     mov	   r0, 0x002A		; *

@@ -21,7 +21,10 @@
 
 
 ;*****************************************************************************
-io_test				dw 0x0000
+io_test				dw 0xBADF
+io_test1			dw 0x00D0
+io_test2			dw 0xDEAD
+io_test3			dw 0xC0DE
 ;*****************************************************************************
 
  
@@ -88,8 +91,23 @@ sad_block:
     call   dbg_putchar
     mov	   r0, 0x004F		; O
     call   dbg_putchar
-    jmp    done_block
+
+    ;; jmp    done_block
+    ;; call   print_newline
+
+    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+    ;; mov    w[HPI_MAILBOX_REG], 0xBEEF
+    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+    
     call   print_newline
+    mov    w[Debug_LW], w[io_test]
+    ;; mov    w[Debug_LW], w[HPI_MAILBOX_REG]
+    
+    mov    w[Debug_UW], 0x0000
+    mov    w[Debug_Title], 0x49 ; I
+    call   dbg_print_32bit
+    call   print_newline
+    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 happy_block:
     ;; mov	   r0, 0x004F		; O
     ;; call   dbg_putchar
