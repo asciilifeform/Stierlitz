@@ -102,7 +102,7 @@ module stierlitz_demo_top
 
    wire 	usb_irq = usb_hpi_int; /* HPI IRQ is active-high */
 
-   // assign led_byte[7] = usb_irq; /* LEDs are active-high */
+   assign led_byte[7] = usb_irq; /* LEDs are active-high */
    // assign led_byte[0] = sace_usb_a[0];
    // assign led_byte[1] = sace_usb_a[1];
    // assign led_byte[2] = usbreset;
@@ -113,8 +113,10 @@ module stierlitz_demo_top
 
    wire [7:0] 	test_leds;
 
+   assign led_byte[6:0] = test_leds[6:0];
    // assign led_byte[7:0] = test_leds[7:0];
-   assign led_byte[7:0] = sace_usb_d[7:0];
+   
+   // assign led_byte[7:0] = sace_usb_d[7:0];
    
   
    hpi_controller stierlitz(.clk(hpi_clock),

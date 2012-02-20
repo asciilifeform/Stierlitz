@@ -95,11 +95,12 @@ module hpi_controller
 
    reg 		     wen_reg;
    reg 		     oen_reg;
-   
-   assign hpi_wen = wen_reg;
 
-   // assign hpi_oen = oen_reg;
-   assign hpi_oen = 1;
+   assign hpi_oen = oen_reg;
+   assign hpi_wen = 1;
+
+   // assign hpi_wen = wen_reg;
+   // assign hpi_oen = 1;
    
 
    // reg [15:0] 	     hpi_address_out;
@@ -107,7 +108,6 @@ module hpi_controller
    // parameter HPI_ADDRESS_OUT = 16'h0500; /* io_test */
    
    reg [15:0] 	     hpi_data_out;
-
    reg [15:0] 	     hpi_data_in;
 
    assign test_out = hpi_data_in[7:0];
@@ -126,13 +126,45 @@ module hpi_controller
 
    reg [2:0] st; /* FSM */
 
+   always @(posedge clk, posedge reset)
+     if (reset)
+       begin
+	  tris <= 1;
+   	  oen_reg <= 1;
+   	  st = STATE_IDLE;
+       end
+     else
+       begin
+   	  case (st)
+   	    STATE_IDLE:
+   	      begin
+		 tris <= 1;
+   		 hpi_ctl_addr_reg <= HPI_REG_MAILBOX;
+   		 oen_reg <= 1;
+   		 st = splat ? STATE_AD1 : STATE_IDLE;
+   	      end
+   	    STATE_AD1:
+   	      begin
+   		 oen_reg <= 0;
+   		 st = STATE_AD2;
+   	      end
+   	    STATE_AD2:
+   	      begin
+		 hpi_data_in <= hpi_data;
+   		 st = STATE_IDLE;
+   	      end
+   	    default:
+   	      begin
+   		 st = STATE_IDLE;
+   	      end
+   	  endcase
+       end
+   
    // always @(posedge clk, posedge reset)
    //   if (reset)
    //     begin
-   // 	  hpi_data_in <= 0;
+   // 	  tris <= 0;
    // 	  wen_reg <= 1;
-   // 	  oen_reg <= 1;
-   // 	  tris <= 1;
    // 	  st = STATE_IDLE;
    //     end
    //   else
@@ -144,42 +176,38 @@ module hpi_controller
    // 		 hpi_ctl_addr_reg <= HPI_REG_ADDRESS;
    // 		 hpi_data_out <= HPI_ADDRESS_OUT;
    // 		 wen_reg <= 1;
-   // 		 oen_reg <= 1;
-   // 		 st = splat ? STATE_A : STATE_IDLE;
+   // 		 st = splat ? STATE_AD1 : STATE_IDLE;
    // 	      end
-   // 	    STATE_A:
+   // 	    STATE_AD1:
    // 	      begin
    // 		 wen_reg <= 0;
-   // 		 st = STATE_B;
+   // 		 st = STATE_AD2;
    // 	      end
-   // 	    STATE_B:
+   // 	    STATE_AD2:
+   // 	      begin
+   // 		 // st = rw ? STATE_WR1 : STATE_RD1;
+   // 		 st = STATE_AD3;
+   // 	      end
+   // 	    STATE_AD3:
    // 	      begin
    // 		 wen_reg <= 1;
-   // 		 st = STATE_C;
+   // 		 st = STATE_WR1;
    // 	      end
-   // 	    STATE_C:
-   // 	      begin
-   // 		 tris <= 1;
-   // 		 st = STATE_D;
-   // 	      end
-   // 	    STATE_D:
+   // 	    STATE_WR1:
    // 	      begin
    // 		 hpi_ctl_addr_reg <= HPI_REG_DATA;
-   // 		 st = STATE_E;
+   // 		 hpi_data_out <= 16'hCAFE;
+   // 		 st = STATE_WR2;
    // 	      end
-   // 	    STATE_E:
+   // 	    STATE_WR2:
    // 	      begin
-   // 		 oen_reg <= 0;
-   // 		 st = STATE_F;
+   // 		 wen_reg <= 0;
+   // 		 st = STATE_WR3;
    // 	      end
-   // 	    STATE_F:
+   // 	    STATE_WR3:
    // 	      begin
-   // 		 hpi_data_in <= hpi_data;
-   // 		 st = STATE_G;
-   // 	      end
-   // 	    STATE_G:
-   // 	      begin
-   // 		 oen_reg <= 1;
+   // 		 wen_reg <= 1;
+   // 		 // st = splat ? STATE_WR1 : STATE_IDLE;
    // 		 st = STATE_IDLE;
    // 	      end
    // 	    default:
@@ -188,61 +216,4 @@ module hpi_controller
    // 	      end
    // 	  endcase
    //     end
-  
-   always @(posedge clk, posedge reset)
-     if (reset)
-       begin
-	  tris <= 0;
-   	  wen_reg <= 1;
-   	  st = STATE_IDLE;
-       end
-     else
-       begin
-   	  case (st)
-   	    STATE_IDLE:
-   	      begin
-		 tris <= 0;
-   		 hpi_ctl_addr_reg <= HPI_REG_ADDRESS;
-   		 hpi_data_out <= HPI_ADDRESS_OUT;
-   		 wen_reg <= 1;
-   		 st = splat ? STATE_AD1 : STATE_IDLE;
-   	      end
-   	    STATE_AD1:
-   	      begin
-   		 wen_reg <= 0;
-   		 st = STATE_AD2;
-   	      end
-   	    STATE_AD2:
-   	      begin
-   		 // st = rw ? STATE_WR1 : STATE_RD1;
-   		 st = STATE_AD3;
-   	      end
-   	    STATE_AD3:
-   	      begin
-   		 wen_reg <= 1;
-   		 st = STATE_WR1;
-   	      end
-   	    STATE_WR1:
-   	      begin
-   		 hpi_ctl_addr_reg <= HPI_REG_DATA;
-   		 hpi_data_out <= 16'hCAFE;
-   		 st = STATE_WR2;
-   	      end
-   	    STATE_WR2:
-   	      begin
-   		 wen_reg <= 0;
-   		 st = STATE_WR3;
-   	      end
-   	    STATE_WR3:
-   	      begin
-   		 wen_reg <= 1;
-   		 // st = splat ? STATE_WR1 : STATE_IDLE;
-   		 st = STATE_IDLE;
-   	      end
-   	    default:
-   	      begin
-   		 st = STATE_IDLE;
-   	      end
-   	  endcase
-       end
 endmodule // hpi_controller

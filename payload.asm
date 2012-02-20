@@ -100,9 +100,11 @@ sad_block:
     ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
     
     call   print_newline
+
+    mov    w[io_test], w[physical_lba_lw]
+    mov    w[HPI_MAILBOX_REG], w[io_test]
     mov    w[Debug_LW], w[io_test]
     ;; mov    w[Debug_LW], w[HPI_MAILBOX_REG]
-    
     mov    w[Debug_UW], 0x0000
     mov    w[Debug_Title], 0x49 ; I
     call   dbg_print_32bit
