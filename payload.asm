@@ -21,10 +21,10 @@
 
 
 ;*****************************************************************************
-io_test				dw 0xBADF
-io_test1			dw 0x00D0
-io_test2			dw 0xDEAD
-io_test3			dw 0xC0DE
+;; io_test				dw 0xBADF
+;; io_test1			dw 0x00D0
+;; io_test2			dw 0xDEAD
+;; io_test3			dw 0xC0DE
 ;*****************************************************************************
 
  
@@ -33,23 +33,26 @@ physical_lba_lw			dw 0x0000
 physical_lba_uw			dw 0x0000
 ;*****************************************************************************
 
-
 ;*****************************************************************************
 ;; Load physical LBA block.
 ;*****************************************************************************
 load_physical_lba_block:
     call   send_host_physical_lba
 
-    ;; right now, just a lame test.
-    mov    r1, 0x0080
-    mov    r9, send_buffer
-@@:
-    mov    w[r9++], w[physical_lba_lw]
-    mov    w[r9++], w[physical_lba_uw]
-    dec    r1
-    jnz    @b
+;;     mov    r1, 0x0200
+;;     mov    r9, send_buffer
+;; @@:
+;;     mov    r0, 0x4000 ; Read byte from bus
+;;     call   hpi_mb_tx  ; Send read command
+;;     call   hpi_mb_rx  ; Receive result
+    
+;;     mov    b[r9++], r0
+;;     dec    r1
+;;     jnz    @b
+
     ret
 ;*****************************************************************************
+
 
 ;*****************************************************************************
 ;; Save physical LBA block.
@@ -57,74 +60,95 @@ load_physical_lba_block:
 save_physical_lba_block:
     call   send_host_physical_lba
 
-    ;; right now, a test.
-    int    PUSHALL_INT
-    ;; mov	   r0, 0x0057		; W
-    ;; call   dbg_putchar
-    ;; mov    w[Debug_Title], 0x42 ; B
-    ;; mov    w[Debug_LW], w[physical_lba_lw]
-    ;; mov    w[Debug_UW], w[physical_lba_uw]
-    ;; call   dbg_print_32bit
-    ;; mov	   r0, 0x0020		; [space]
-    ;; call   dbg_putchar
-    ;;-------------------------------------------
-    ;; See if expected values match:
-    mov    r1, 0x0080
+    mov    r1, 0x0200
     mov    r9, block_receive_buffer
 @@:
-    mov    r0, w[r9++]
-    cmp    r0, w[physical_lba_lw]
-    jne    sad_block
-    mov    r2, w[r9++]
-    cmp    r2, w[physical_lba_uw]
-    jne    sad_block
+    xor    r0, r0
+    mov    r0, b[r9++]
+
+    or     r0, 0x8000 ; Write byte to bus
+    call   hpi_mb_tx  ; Send read command
+
+    call   hpi_mb_rx  ; Receive confirmation
+
     dec    r1
     jnz    @b
-    ;; all ok:
-    jmp    happy_block
-sad_block:
-    mov    w[Debug_LW], r0
-    mov    w[Debug_UW], r2
-    mov	   r0, 0x004E		; N
-    call   dbg_putchar
-    mov    w[Debug_Title], 0x42 ; B
-    call   dbg_print_32bit
-    mov	   r0, 0x0020		; [space]
-    call   dbg_putchar
-    mov	   r0, 0x004E		; N
-    call   dbg_putchar
-    mov	   r0, 0x004F		; O
-    call   dbg_putchar
-
-    ;; jmp    done_block
-    ;; call   print_newline
-
-    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-    ;; mov    w[HPI_MAILBOX_REG], 0xBEEF
-    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-    
-    call   print_newline
-    mov    w[io_test], w[physical_lba_lw]
-
-
-    
-    mov    w[Debug_LW], w[io_test]
-    ;; mov    w[Debug_LW], w[HPI_MAILBOX_REG]
-    mov    w[Debug_UW], 0x0000
-    mov    w[Debug_Title], 0x49 ; I
-    call   dbg_print_32bit
-    call   print_newline
-    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-happy_block:
-    ;; mov	   r0, 0x004F		; O
-    ;; call   dbg_putchar
-    ;; mov	   r0, 0x004B		; K
-    ;; call   dbg_putchar
-done_block:
-    ;;-------------------------------------------
-    int    POPALL_INT
-    ret
+    ret    
 ;*****************************************************************************
+
+
+
+;; ;*****************************************************************************
+;; ;; Load physical LBA block.
+;; ;*****************************************************************************
+;; load_physical_lba_block:
+;;     call   send_host_physical_lba
+
+;;     ;; right now, just a lame test.
+;;     mov    r1, 0x0080
+;;     mov    r9, send_buffer
+;; @@:
+;;     mov    w[r9++], w[physical_lba_lw]
+;;     mov    w[r9++], w[physical_lba_uw]
+;;     dec    r1
+;;     jnz    @b
+;;     ret
+;; ;*****************************************************************************
+
+;; ;*****************************************************************************
+;; ;; Save physical LBA block.
+;; ;*****************************************************************************
+;; save_physical_lba_block:
+;;     call   send_host_physical_lba
+
+;;     ;; right now, a test.
+;;     int    PUSHALL_INT
+;;     ;;-------------------------------------------
+;;     ;; See if expected values match:
+;;     mov    r1, 0x0080
+;;     mov    r9, block_receive_buffer
+;; @@:
+;;     mov    r0, w[r9++]
+;;     cmp    r0, w[physical_lba_lw]
+;;     jne    sad_block
+;;     mov    r2, w[r9++]
+;;     cmp    r2, w[physical_lba_uw]
+;;     jne    sad_block
+;;     dec    r1
+;;     jnz    @b
+;;     ;; all ok:
+;;     jmp    happy_block
+;; sad_block:
+;;     mov    w[Debug_LW], r0
+;;     mov    w[Debug_UW], r2
+;;     mov	   r0, 0x004E		; N
+;;     call   dbg_putchar
+;;     mov    w[Debug_Title], 0x42 ; B
+;;     call   dbg_print_32bit
+;;     mov	   r0, 0x0020		; [space]
+;;     call   dbg_putchar
+;;     mov	   r0, 0x004E		; N
+;;     call   dbg_putchar
+;;     mov	   r0, 0x004F		; O
+;;     call   dbg_putchar
+;;     ;; test
+;;     call   print_newline
+;;     mov    w[Debug_LW], w[physical_lba_lw]
+;;     mov    w[Debug_UW], 0x0000
+;;     mov    w[Debug_Title], 0x49 ; I
+;;     call   dbg_print_32bit
+;;     call   print_newline
+;;     ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; happy_block:
+;;     ;; mov	   r0, 0x004F		; O
+;;     ;; call   dbg_putchar
+;;     ;; mov	   r0, 0x004B		; K
+;;     ;; call   dbg_putchar
+;; done_block:
+;;     ;;-------------------------------------------
+;;     int    POPALL_INT
+;;     ret
+;; ;*****************************************************************************
 
 
 ;*****************************************************************************

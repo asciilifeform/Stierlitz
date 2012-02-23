@@ -71,8 +71,8 @@ module stierlitz
    input wire enable; /* Active-high. */
    
    /* Bus interface */
-   output wire [39:0] bus_address;  /* LBA of active block and Word offset. */
-   inout wire  [15:0] bus_data;     /* Word-wide data in/out on bus. */
+   output wire [40:0] bus_address;  /* LBA of active block and block offset. */
+   inout wire  [7:0]  bus_data;     /* Data in/out on bus. */
    output wire 	      bus_rw;       /* Bus Op type: 1=Read 0=Write*/
    output wire 	      bus_start_op; /* Start of operation (active-high.) */
    input wire 	      bus_ready;    /* Bus is ready (high) if no op is in progress. */
@@ -91,19 +91,19 @@ module stierlitz
    /**************************************************************************/
    /* Bus (user) side */
    reg [7:0] 	     LBA [3:0]; /* Current LBA address */
-   reg [7:0] 	     word_offset; /* Offset of current word. */
+   reg [8:0] 	     byte_offset; /* Offset of current byte in block. */
 
-   assign bus_address[7:0]   = word_offset;
-   assign bus_address[15:8]  = LBA[0];
-   assign bus_address[23:16] = LBA[1];
-   assign bus_address[31:24] = LBA[2];
-   assign bus_address[39:32] = LBA[3];
+   assign bus_address[8:0]   = byte_offset;
+   assign bus_address[16:9]  = LBA[0];
+   assign bus_address[24:17] = LBA[1];
+   assign bus_address[32:25] = LBA[2];
+   assign bus_address[40:33] = LBA[3];
 
-   reg [15:0] 	     bus_word_out;
+   reg [7:0] 	     bus_byte_out;
    reg 		     bus_rw_control; /* Bus Op type: 1=Read 0=Write*/
    assign bus_rw = bus_rw_control;
    
-   assign bus_data = bus_rw_control ? 16'bz : bus_word_out;
+   assign bus_data = bus_rw_control ? 8'bz : bus_byte_out;
 
    reg 		     bus_op;
    assign bus_start_op = bus_op;
@@ -132,23 +132,21 @@ module stierlitz
    
    reg [2:0] 	     hpi_state;       /* Current FSM state */   
 
-   reg 		     is_bus_reading;
-   reg 		     is_bus_writing;
 
    always @(posedge clk, posedge reset)
      if (reset)
        begin
 	  read_enable <= 0;
 	  write_enable <= 0;
-	  is_bus_reading <= 0;
-	  is_bus_writing <= 0;
 	  bus_op <= 0;
+	  bus_rw_control <= 1;
 	  hpi_data_in_reg <= 0;
 	  hpi_data_out_reg <= 0;
 	  LBA[0] <= 0;
 	  LBA[1] <= 0;
 	  LBA[2] <= 0;
 	  LBA[3] <= 0;
+	  byte_offset <= 0;
 	  hpi_state = STATE_IDLE;
        end
      else
@@ -172,7 +170,7 @@ module stierlitz
 		 read_enable <= 1;
 		 write_enable <= 0;
 		 hpi_data_in_reg <= cy_hpi_data;
-		 hpi_state = is_bus_writing ? STATE_BUS_WRITE : STATE_CMD;
+		 hpi_state = STATE_CMD;
 	      end
 	    STATE_MBX_WRITE_1:
 	      begin
@@ -184,7 +182,7 @@ module stierlitz
 	      begin
 		 read_enable <= 0;
 		 write_enable <= 0;
-		 hpi_state = is_bus_reading ? STATE_BUS_READ : STATE_IDLE;
+		 hpi_state = STATE_IDLE;
 	      end
 	    STATE_CMD:
 	      begin
@@ -195,46 +193,37 @@ module stierlitz
 		     begin
 			/* Set nth byte of LBA address (0...3) */
 			LBA[(hpi_data_in_reg[9:8])] <= hpi_data_in_reg[7:0];
-			word_offset <= 0; /* Reset block offset word when setting LBA */
+			byte_offset <= 0; /* Reset block offset when setting LBA */
 			hpi_state = STATE_IDLE;
 		     end
 		   2'b10:
 		     begin
-			/* Next HPI word will be written on bus. */
-			is_bus_reading <= 0;
-			is_bus_writing <= 1;
-			hpi_state = STATE_IDLE;
+			/* HPI byte will be written on bus. */
+			bus_byte_out <= hpi_data_in_reg[7:0];
+			hpi_state = STATE_BUS_WRITE;
 		     end
 		   2'b01:
 		     begin
-			/* Word will be read from bus and sent back on HPI. */
-			is_bus_reading <= 1;
-			is_bus_writing <= 0;
+			/* Byte will be read from bus and sent back on HPI. */
 			hpi_state = STATE_BUS_READ;
 		     end
 		   default:
 		     begin
 			/* Malformed command? Do nothing. */
-			is_bus_reading <= 0;
-			is_bus_writing <= 0;
 			hpi_state = STATE_IDLE;
 		     end
 		 endcase // case (hpi_data_in_reg[15:14])
-		 
 	      end
 	    STATE_BUS_READ:
 	      begin
 		 read_enable <= 0;
 		 write_enable <= 0;
 		 bus_rw_control <= 1; /* READ */
-		 
 		 bus_op <= 1;   /* Begin op */
-		 hpi_data_out_reg <= bus_data; /* Read a word off the bus. */
-
-		 /* Increment word offset only if op is done. */
-		 word_offset <= bus_ready ? (word_offset + 1) : word_offset;
-		 
-		 /* Spin until the bus is READY again. Then send back the word read. */
+		 hpi_data_out_reg[7:0] <= bus_data; /* Read a byte off the bus. */
+		 /* Increment block offset only if op is done. */
+		 byte_offset <= bus_ready ? (byte_offset + 1) : byte_offset;
+		 /* Spin until the bus is READY again. Then send back the byte read. */
 		 hpi_state = bus_ready ? STATE_MBX_WRITE_1 : STATE_BUS_READ;
 	      end
 	    STATE_BUS_WRITE:
@@ -242,14 +231,10 @@ module stierlitz
 		 read_enable <= 0;
 		 write_enable <= 0;
 		 bus_rw_control <= 0; /* WRITE */
-		 
-		 bus_word_out <= hpi_data_in_reg; /* Put a word on the bus. */
 		 bus_op <= 1;   /* Begin op */
-
-		 /* Increment word offset only if op is done. */
-		 word_offset <= bus_ready ? (word_offset + 1) : word_offset;
-		 
-		 /* Spin until the bus is READY again. Then send back the word read. */
+		 /* Increment block offset only if op is done. */
+		 byte_offset <= bus_ready ? (byte_offset + 1) : byte_offset;
+		 /* Spin until the bus is READY again. Then send back the byte read. */
 		 hpi_state = bus_ready ? STATE_MBX_WRITE_1 : STATE_BUS_WRITE;
 	      end
 	    default:

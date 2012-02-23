@@ -39,28 +39,46 @@ module stierlitz_testbench;
    output wire 	sace_usb_oen;
    output wire 	sace_usb_wen;
    output wire 	usb_csn;
-   input wire  	usb_hpi_int;
+   wire  	usb_hpi_int;
    output wire [1:0] sace_usb_a;
-   inout wire [15:0] sace_usb_d;
+   wire [15:0] sace_usb_d;
    output wire 	usb_hpi_reset_n;
 
-   // wire 	hpi_manual_test; /* temporary manual toggle to run tester */
-   reg 		hpi_manual_test;
-   
+   // reg   	usb_hpi_int;
+   // reg [15:0]	sace_usb_d;
+
+   reg 		hpi_int = 0;
+   reg [15:0]	usb_d = 0;
+   assign usb_hpi_int = hpi_int;
+   assign sace_usb_d = usb_d;
+      
    
    wire 	usbreset = ~sys_rst_pin;
-   
-   hpi_controller stierlitz(.clk(hpi_clock),
-			    .reset(usbreset),
-			    .hpi_resetn(usb_hpi_reset_n),
-			    .hpi_csn(usb_csn),
-			    .hpi_oen(sace_usb_oen),
-			    .hpi_wen(sace_usb_wen),
-			    .hpi_irq(usb_hpi_int),
-			    .hpi_address(sace_usb_a),
-			    .hpi_data(sace_usb_d),
-			    .splat(hpi_manual_test)
-			    );
+
+   wire 	sbus_ready;
+   wire 	sbus_rw;
+   wire 	sbus_start_op;
+   wire [40:0] 	sbus_address;
+   wire [7:0] 	sbus_data;
+
+   stierlitz s(.clk(hpi_clock),
+	       .reset(usbreset),
+	       .enable(1),
+	       /* Control wiring */
+	       .bus_ready(sbus_ready),
+	       .bus_address(sbus_address),
+	       .bus_data(sbus_data),
+	       .bus_rw(sbus_rw),
+	       .bus_start_op(sbus_start_op),
+	       /* CY7C67300 connections */
+	       .cy_hpi_address(sace_usb_a),
+	       .cy_hpi_data(sace_usb_d),
+	       .cy_hpi_oen(sace_usb_oen),
+	       .cy_hpi_wen(sace_usb_wen),
+	       .cy_hpi_csn(usb_csn),
+	       .cy_hpi_irq(usb_hpi_int),
+	       .cy_hpi_resetn(usb_hpi_reset_n)
+	       );
 
    /* 16 MHz (x2) clock for HPI interface */
    wire 	hpi_clock;
@@ -91,21 +109,42 @@ module stierlitz_testbench;
      begin: Init
 	#0 $display ("Init!\n");
 	#0 sys_rst_pin = 1;
-	#0 hpi_manual_test = 0;
 	// system reset active
 	#1000 sys_rst_pin = 0;
 	#10000 sys_rst_pin = 1;
 	// end of system reset
-	// start of test
-	#20000 hpi_manual_test = 1;
-	#1000000 hpi_manual_test = 0;
-	// end of test
      end
 
    always
      begin
-	#5000000
-	  $finish;
+	// start of test
+	#20000;
+
+	usb_d = 'h00AA;
+	hpi_int = 1;
+	#10000;
+	hpi_int = 0;
+
+	usb_d = 'h01BB;
+	hpi_int = 1;
+	#10000;
+	hpi_int = 0;
+
+	usb_d = 'h02CC;
+	hpi_int = 1;
+	#10000;
+	hpi_int = 0;
+
+	usb_d = 'h03DD;
+	hpi_int = 1;
+	#10000;
+	hpi_int = 0;
+
+	// ...
+	
+	// end of test
+	#5000000;
+        $finish;
      end
 
    initial
@@ -120,7 +159,11 @@ module stierlitz_testbench;
 		  usb_hpi_int,
 		  sace_usb_a,
 		  sace_usb_d,
-		  hpi_manual_test
+		  sbus_ready,
+		  sbus_rw,
+		  sbus_start_op,
+		  sbus_address,
+		  sbus_data
 		  );
      end
    

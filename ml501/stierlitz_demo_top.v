@@ -102,42 +102,18 @@ module stierlitz_demo_top
 
    wire 	usb_irq = usb_hpi_int; /* HPI IRQ is active-high */
 
-   // assign led_byte[7] = usb_irq; /* LEDs are active-high */
-   // assign led_byte[0] = sace_usb_a[0];
-   // assign led_byte[1] = sace_usb_a[1];
-   // assign led_byte[2] = usbreset;
-   // assign led_byte[3] = sace_usb_oen;
-   // assign led_byte[4] = sace_usb_wen;
-   // assign led_byte[5] = (sace_usb_a != 0);
-   // assign led_byte[6] = (sace_usb_d != 0);
-
-   // wire [7:0] 	test_leds;
-
-   // assign led_byte[6:0] = test_leds[6:0];
-   // assign led_byte[7:0] = test_leds[7:0];
-   // assign led_byte[7:0] = sace_usb_d[7:0];
-
-
+   
    wire 	sbus_ready;
    wire 	sbus_rw;
    wire 	sbus_start_op;
-   wire [39:0] 	sbus_address;
-   wire [15:0] 	sbus_data;
+   wire [40:0] 	sbus_address;
+   wire [7:0] 	sbus_data;
    
 
    assign sbus_ready = 1;
 
-   // assign led_byte[0] = sbus_rw;
-   // assign led_byte[1] = sbus_start_op;
-   // assign led_byte[2] = (sbus_address[15:8] != 0);
-   // assign led_byte[3] = (sbus_address[23:16] != 0);
-   // assign led_byte[4] = (sbus_address[31:24] != 0);
-   // assign led_byte[5] = (sbus_address[39:32] != 0);
-   // assign led_byte[6] = sbus_data[0];
-   // assign led_byte[7] = sbus_data[1];
 
-   assign led_byte = sbus_address[15:8];
-   // assign led_byte = sbus_address[23:16];
+   assign led_byte = sbus_address[16:9];
 
    
    stierlitz s(.clk(hpi_clock),
@@ -158,5 +134,8 @@ module stierlitz_demo_top
 	       .cy_hpi_irq(usb_hpi_int),
 	       .cy_hpi_resetn(usb_hpi_reset_n)
 	       );
-  
+
+   assign sbus_data = sbus_rw ? 1'hAA : 8'bz;
+   
+   
 endmodule
