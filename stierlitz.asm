@@ -82,7 +82,7 @@ init_code:
     ;; HPI
     mov    w[GPIO_CNTRL], GIO_IntCtl_Mode_HPIbm ; Enable HPI pins
     or     w[INT_EN_REG], bmINT_EN_MBX_OUT ; enable Mailbox OUT IRQ
-    ;; or     w[INT_EN_REG], bmINT_EN_MBX_IN ; enable Mailbox IN IRQ
+    or     w[INT_EN_REG], bmINT_EN_MBX_IN ; enable Mailbox IN IRQ
     
     ;;DEBUG;;
     call   print_newline

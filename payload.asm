@@ -39,16 +39,16 @@ physical_lba_uw			dw 0x0000
 load_physical_lba_block:
     call   send_host_physical_lba
 
-;;     mov    r1, 0x0200
-;;     mov    r9, send_buffer
-;; @@:
-;;     mov    r0, 0x4000 ; Read byte from bus
-;;     call   hpi_mb_tx  ; Send read command
-;;     call   hpi_mb_rx  ; Receive result
+    mov    r1, 0x0200
+    mov    r9, send_buffer
+@@:
+    mov    r0, 0x4000 ; Read byte from bus
+    call   hpi_mb_tx  ; Send read command
+    call   hpi_mb_rx  ; Receive result
     
-;;     mov    b[r9++], r0
-;;     dec    r1
-;;     jnz    @b
+    mov    b[r9++], r0
+    dec    r1
+    jnz    @b
 
     ret
 ;*****************************************************************************
@@ -67,8 +67,7 @@ save_physical_lba_block:
     mov    r0, b[r9++]
 
     or     r0, 0x8000 ; Write byte to bus
-    call   hpi_mb_tx  ; Send read command
-
+    call   hpi_mb_tx  ; Send write command
     call   hpi_mb_rx  ; Receive confirmation
 
     dec    r1
@@ -76,6 +75,34 @@ save_physical_lba_block:
     ret    
 ;*****************************************************************************
 
+
+;*****************************************************************************
+;; Set host's LBA registers.
+;*****************************************************************************
+send_host_physical_lba:
+    ;; Send LBA[0]:
+    mov    r0, w[physical_lba_lw]
+    and    r0, 0xFF
+    call   hpi_mb_tx
+    ;; Send LBA[1]:
+    mov    r0, w[physical_lba_lw]
+    shr    r0, 8
+    and    r0, 0xFF
+    or     r0, 0x100
+    call   hpi_mb_tx
+    ;; Send LBA[2]:
+    mov    r0, w[physical_lba_uw]
+    shr    r0, 8
+    and    r0, 0xFF
+    or     r0, 0x200
+    call   hpi_mb_tx
+    ;; Send LBA[3]:
+    mov    r0, w[physical_lba_uw]
+    and    r0, 0xFF
+    or     r0, 0x300
+    call   hpi_mb_tx
+    ret
+;*****************************************************************************
 
 
 ;; ;*****************************************************************************
@@ -151,30 +178,3 @@ save_physical_lba_block:
 ;; ;*****************************************************************************
 
 
-;*****************************************************************************
-;; Set host's LBA registers.
-;*****************************************************************************
-send_host_physical_lba:
-    ;; Send LBA[0]:
-    mov    r0, w[physical_lba_lw]
-    and    r0, 0xFF
-    call   hpi_mb_tx
-    ;; Send LBA[1]:
-    mov    r0, w[physical_lba_lw]
-    shr    r0, 8
-    and    r0, 0xFF
-    or     r0, 0x100
-    call   hpi_mb_tx
-    ;; Send LBA[2]:
-    mov    r0, w[physical_lba_uw]
-    shr    r0, 8
-    and    r0, 0xFF
-    or     r0, 0x200
-    call   hpi_mb_tx
-    ;; Send LBA[3]:
-    mov    r0, w[physical_lba_uw]
-    and    r0, 0xFF
-    or     r0, 0x300
-    call   hpi_mb_tx
-    ret
-;*****************************************************************************

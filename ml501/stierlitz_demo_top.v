@@ -77,7 +77,7 @@ module stierlitz_demo_top
    /* 16 MHz (x2) clock for HPI interface */
    wire 	hpi_clock;
 
-   reg [6:0] 	clkdiv;
+   reg [2:0] 	clkdiv;
    always @(posedge sys_clk, posedge usbreset)
      if (usbreset)
        begin
@@ -87,7 +87,7 @@ module stierlitz_demo_top
        begin
 	  clkdiv <= clkdiv + 1;
        end
-   assign hpi_clock = clkdiv[6];
+   assign hpi_clock = clkdiv[2];
    
    // DCM hpi_clock_dcm (.CLKIN(sys_clk),
    // 		      .CLKFX(hpi_clock),
@@ -135,7 +135,22 @@ module stierlitz_demo_top
 	       .cy_hpi_resetn(usb_hpi_reset_n)
 	       );
 
-   assign sbus_data = sbus_rw ? 1'hAA : 8'bz;
-   
+   reg [7:0] 	test;
+   assign sbus_data = sbus_rw ? test : 8'bz;
+
+
+   always @(posedge sys_clk)
+     begin
+	case (sbus_address[1:0])
+	  2'b00:
+	    test <= sbus_address[16:9];
+	  2'b01:
+	    test <= sbus_address[24:17];
+	  2'b10:
+	    test <= sbus_address[32:25];
+	  2'b11:
+	    test <= sbus_address[40:33];
+	endcase // case (sbus_address[1:0])
+     end
    
 endmodule

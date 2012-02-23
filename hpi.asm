@@ -25,7 +25,6 @@
 ;; TODO: timeouts
 wait_for_hpi_read:
 @@:
-    call   bios_idle
     cmp    b[hpi_was_read], 0x01
     jne    @b
     mov    b[hpi_was_read], 0x00
@@ -39,7 +38,6 @@ wait_for_hpi_read:
 ;; TODO: timeouts
 wait_for_hpi_written:
 @@:
-    call   bios_idle
     cmp    b[hpi_was_written], 0x01
     jne    @b
     mov    b[hpi_was_written], 0x00
