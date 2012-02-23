@@ -20,7 +20,7 @@
 
 `timescale 1ns/100ps
 
-`include "hpi_controller.v"
+`include "stierlitz.v"
 
 module stierlitz_testbench;
 

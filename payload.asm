@@ -38,6 +38,8 @@ physical_lba_uw			dw 0x0000
 ;; Load physical LBA block.
 ;*****************************************************************************
 load_physical_lba_block:
+    call   send_host_physical_lba
+
     ;; right now, just a lame test.
     mov    r1, 0x0080
     mov    r9, send_buffer
@@ -53,6 +55,8 @@ load_physical_lba_block:
 ;; Save physical LBA block.
 ;*****************************************************************************
 save_physical_lba_block:
+    call   send_host_physical_lba
+
     ;; right now, a test.
     int    PUSHALL_INT
     ;; mov	   r0, 0x0057		; W
@@ -100,9 +104,10 @@ sad_block:
     ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
     
     call   print_newline
-
     mov    w[io_test], w[physical_lba_lw]
-    mov    w[HPI_MAILBOX_REG], w[io_test]
+
+
+    
     mov    w[Debug_LW], w[io_test]
     ;; mov    w[Debug_LW], w[HPI_MAILBOX_REG]
     mov    w[Debug_UW], 0x0000
@@ -118,5 +123,34 @@ happy_block:
 done_block:
     ;;-------------------------------------------
     int    POPALL_INT
+    ret
+;*****************************************************************************
+
+
+;*****************************************************************************
+;; Set host's LBA registers.
+;*****************************************************************************
+send_host_physical_lba:
+    ;; Send LBA[0]:
+    mov    r0, w[physical_lba_lw]
+    and    r0, 0xFF
+    call   hpi_mb_tx
+    ;; Send LBA[1]:
+    mov    r0, w[physical_lba_lw]
+    shr    r0, 8
+    and    r0, 0xFF
+    or     r0, 0x100
+    call   hpi_mb_tx
+    ;; Send LBA[2]:
+    mov    r0, w[physical_lba_uw]
+    shr    r0, 8
+    and    r0, 0xFF
+    or     r0, 0x200
+    call   hpi_mb_tx
+    ;; Send LBA[3]:
+    mov    r0, w[physical_lba_uw]
+    and    r0, 0xFF
+    or     r0, 0x300
+    call   hpi_mb_tx
     ret
 ;*****************************************************************************

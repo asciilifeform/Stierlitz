@@ -34,6 +34,8 @@ bios_configuration_change:  	dw	0xDEAD
 bios_idle_chain:  		dw	0xDEAD
 bios_ep1_in_isr:    		dw	0xDEAD
 bios_ep2_out_isr:   		dw	0xDEAD
+bios_hpi_tx_isr:    		dw	0xDEAD
+bios_hpi_rx_isr:    		dw	0xDEAD
 ;*****************************************************************************
 insert_vectors:
     ; Update USB reset handler.
@@ -56,6 +58,35 @@ insert_vectors:
     mov    w[bios_ep2_out_isr], w[SIE2_EP2_VEC]
     mov    w[SIE2_EP1_VEC], my_ep1_in_vec
     mov    w[SIE2_EP2_VEC], my_ep2_out_vec
+    ;; HPI Mailbox ISRs
+    mov    w[bios_hpi_tx_isr], w[HPI_MBOX_TX_EMPTY_VEC]
+    mov    w[HPI_MBOX_TX_EMPTY_VEC], my_hpi_tx_empty_vec
+    mov    w[bios_hpi_rx_isr], w[HPI_MBOX_RX_FULL_VEC]
+    mov    w[HPI_MBOX_RX_FULL_VEC], my_hpi_rx_full_vec
+    ret
+;*****************************************************************************
+
+
+;*****************************************************************************
+;; HPI mailbox was read by host
+;*****************************************************************************
+hpi_was_read		db	0x00
+;*****************************************************************************
+my_hpi_tx_empty_vec:
+    call   [bios_hpi_tx_isr]
+    mov    b[hpi_was_read], 0x01
+    ret
+;*****************************************************************************
+
+
+;*****************************************************************************
+;; HPI mailbox was written by host
+;*****************************************************************************
+hpi_was_written		db	0x00
+;*****************************************************************************
+my_hpi_rx_full_vec:
+    call   [bios_hpi_rx_isr]
+    mov    b[hpi_was_written], 0x01
     ret
 ;*****************************************************************************
 

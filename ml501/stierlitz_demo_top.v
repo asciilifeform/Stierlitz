@@ -20,7 +20,7 @@
 
 `timescale 1ns/1ps
 
-`include "hpi_controller.v"
+`include "stierlitz.v"
 
 
 module stierlitz_demo_top
@@ -102,7 +102,7 @@ module stierlitz_demo_top
 
    wire 	usb_irq = usb_hpi_int; /* HPI IRQ is active-high */
 
-   assign led_byte[7] = usb_irq; /* LEDs are active-high */
+   // assign led_byte[7] = usb_irq; /* LEDs are active-high */
    // assign led_byte[0] = sace_usb_a[0];
    // assign led_byte[1] = sace_usb_a[1];
    // assign led_byte[2] = usbreset;
@@ -111,26 +111,52 @@ module stierlitz_demo_top
    // assign led_byte[5] = (sace_usb_a != 0);
    // assign led_byte[6] = (sace_usb_d != 0);
 
-   wire [7:0] 	test_leds;
+   // wire [7:0] 	test_leds;
 
-   assign led_byte[6:0] = test_leds[6:0];
+   // assign led_byte[6:0] = test_leds[6:0];
    // assign led_byte[7:0] = test_leds[7:0];
-   
    // assign led_byte[7:0] = sace_usb_d[7:0];
+
+
+   wire 	sbus_ready;
+   wire 	sbus_rw;
+   wire 	sbus_start_op;
+   wire [39:0] 	sbus_address;
+   wire [15:0] 	sbus_data;
    
-  
-   hpi_controller stierlitz(.clk(hpi_clock),
-			    .reset(usbreset),
-			    .hpi_resetn(usb_hpi_reset_n),
-			    .hpi_csn(usb_csn),
-			    .hpi_oen(sace_usb_oen),
-			    .hpi_wen(sace_usb_wen),
-			    .hpi_irq(usb_hpi_int),
-			    .hpi_address(usb_addr),
-			    .hpi_data(sace_usb_d),
-			    .splat(hpi_manual_test),
-			    .test_out(test_leds)
-			    );
+
+   assign sbus_ready = 1;
+
+   // assign led_byte[0] = sbus_rw;
+   // assign led_byte[1] = sbus_start_op;
+   // assign led_byte[2] = (sbus_address[15:8] != 0);
+   // assign led_byte[3] = (sbus_address[23:16] != 0);
+   // assign led_byte[4] = (sbus_address[31:24] != 0);
+   // assign led_byte[5] = (sbus_address[39:32] != 0);
+   // assign led_byte[6] = sbus_data[0];
+   // assign led_byte[7] = sbus_data[1];
+
+   assign led_byte = sbus_address[15:8];
+   // assign led_byte = sbus_address[23:16];
+
    
+   stierlitz s(.clk(hpi_clock),
+	       .reset(usbreset),
+	       .enable(1),
+	       /* Control wiring */
+	       .bus_ready(sbus_ready),
+	       .bus_address(sbus_address),
+	       .bus_data(sbus_data),
+	       .bus_rw(sbus_rw),
+	       .bus_start_op(sbus_start_op),
+	       /* CY7C67300 connections */
+	       .cy_hpi_address(usb_addr),
+	       .cy_hpi_data(sace_usb_d),
+	       .cy_hpi_oen(sace_usb_oen),
+	       .cy_hpi_wen(sace_usb_wen),
+	       .cy_hpi_csn(usb_csn),
+	       .cy_hpi_irq(usb_hpi_int),
+	       .cy_hpi_resetn(usb_hpi_reset_n)
+	       );
   
 endmodule

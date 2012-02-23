@@ -1,4 +1,8 @@
-/*************************************************************************
+/**************************************************************************
+ *                            Stierlitz (FPGA side)                       *
+ *************************************************************************/
+
+/**************************************************************************
  *                (c) Copyright 2012 Stanislav Datskovskiy                *
  *                         http://www.loper-os.org                        *
  **************************************************************************
@@ -18,202 +22,165 @@
  *                                                                        *
  *************************************************************************/
 
-/*
- Maximum data rate of CY7C67300 is 8MHz.
- */
 
+/**************************************************************************/
 module hpi_controller
   (clk,
    reset,
+   /* Control wiring */
+   ce,
+   data_out,
+   data_in,
+   ready,
+   rw,
+   start_op,
+   irq,
    /* CY7C67300 wiring */
-   hpi_address,
-   hpi_data,
-   hpi_oen,
-   hpi_wen,
-   hpi_csn,
-   hpi_irq,
-   hpi_resetn,
-   /* Control */
-   splat,
-   test_out
-   /* ... */
+   cy_hpi_address,
+   cy_hpi_data,
+   cy_hpi_oen,
+   cy_hpi_wen,
+   cy_hpi_csn,
+   cy_hpi_irq,
+   cy_hpi_resetn
    );
+   
+   /**************************************************************************/
+   localparam [1:0] /* The four HPI addresses: */
+     HPI_REG_DMA_DATA = 2'b00,    /* Put or get DMA data. (R/W) */
+     HPI_REG_MAILBOX = 2'b01,     /* Send or receive data using Mailbox. (R/W) */
+     HPI_REG_DMA_ADDRESS = 2'b10, /* Latch address for start of DMA transaction. (W) */
+     HPI_REG_STATUS = 2'b11;      /* Read chip status register, for free. (R) */
 
-   /* There are exactly four HPI addresses: */
-   localparam [1:0]
-     HPI_REG_DATA = 2'b00,     /* R/W */
-     HPI_REG_MAILBOX = 2'b01,  /* R/W */
-     HPI_REG_ADDRESS = 2'b10,  /* W */
-     HPI_REG_STATUS = 2'b11;   /* R */
-
-   /* States for FSM */
    localparam [2:0]
-     STATE_IDLE = 0,
-     STATE_AD1 = 1,
-     STATE_AD2 = 2,
-     STATE_AD3 = 3,
-     STATE_WR1 = 4,
-     STATE_WR2 = 5,
-     STATE_WR3 = 6;
+     STATE_IDLE            =  0,
+     STATE_READ_1          =  1,
+     STATE_READ_2          =  2,
+     STATE_WRITE_1         =  3,
+     STATE_WRITE_2         =  4;
 
+   /**************************************************************************/
 
-   // localparam [2:0]
-   //   STATE_IDLE = 0,
-   //   STATE_A = 1,
-   //   STATE_B = 2,
-   //   STATE_C = 3,
-   //   STATE_D = 4,
-   //   STATE_E = 5,
-   //   STATE_F = 6,
-   //   STATE_G = 7;
    
+   /**************************************************************************/
+   /* System */
+   input wire clk; /* ? MHz (? x max HPI freq.) */
+   input wire reset; /* Active-high */
 
-   /****************************************/
-   input 	     splat; /* For testing */
-   /****************************************/
-   
-   input clk; /* 16MHz (2x max HPI freq.) */
-   input reset; /* Active-high */
-   
-   output wire [1:0] hpi_address;
-   inout wire [15:0] hpi_data;
-   output wire 	     hpi_oen;
-   output wire 	     hpi_wen;
-   output wire 	     hpi_csn;
-   input wire 	     hpi_irq;
-   output wire 	     hpi_resetn;
-
-   output wire [7:0] test_out;
-    
-
-   assign hpi_resetn = ~reset; /* reset with FPGA */
-   
-   assign hpi_csn = 0; /* For now, pretend ACE doesn't exist */
-   
-   reg [1:0] 	     hpi_ctl_addr_reg;
-   assign hpi_address[1:0] = hpi_ctl_addr_reg[1:0];
-
-   reg 		     wen_reg;
-   reg 		     oen_reg;
-
-   assign hpi_oen = oen_reg;
-   assign hpi_wen = 1;
-
-   // assign hpi_wen = wen_reg;
-   // assign hpi_oen = 1;
-   
-
-   // reg [15:0] 	     hpi_address_out;
-   parameter HPI_ADDRESS_OUT = 16'h1324; /* io_test */
-   // parameter HPI_ADDRESS_OUT = 16'h0500; /* io_test */
-   
-   reg [15:0] 	     hpi_data_out;
-   reg [15:0] 	     hpi_data_in;
-
-   assign test_out = hpi_data_in[7:0];
-
-
-   reg 		     tris;
+   input wire ce; /* chip enable, active-low */
+   output wire [15:0] data_out;
+   input wire  [17:0] data_in;   /* Includes the two reg address bits. */
+   output wire 	      ready;     /* Active-high. */
+   input wire 	      rw;        /* Op type: 1=Read 0=Write*/
+   input wire 	      start_op;  /* Start of operation (active-high.) */
+   output wire 	      irq;       /* Mailbox has message. */
       
-   assign hpi_data = tris ? 16'bz : hpi_data_out;
-   // assign hpi_data = hpi_data_out;
-   
-   // assign hpi_data = 16'bz;
-   
-   // reg [15:0] 	     hpi_data_in;
-   // wire       rw; /* high=write low=read */
-   // assign rw = 1; /* write test */
+   /* Connections to CY7C67300 */
+   output wire [1:0] cy_hpi_address;  /* Select HPI register. */
+   inout wire [15:0] cy_hpi_data;     /* Bidirectional HPI data. */
+   output wire 	     cy_hpi_oen;      /* HPI Read Enable (active-low) */
+   output wire 	     cy_hpi_wen;      /* HPI Write Enable (active-low) */
+   output wire 	     cy_hpi_csn;      /* HPI Chip Select (active-low) */
+   input wire 	     cy_hpi_irq;      /* HPI IRQ line (active-high) */
+   output wire 	     cy_hpi_resetn;   /* HPI Chip Reset (active-low) */
+   /**************************************************************************/
 
-   reg [2:0] st; /* FSM */
 
+   /**************************************************************************/
+   assign cy_hpi_resetn = ~reset;
+   
+   assign cy_hpi_csn = ce; /* Chip enable */
+   wire 	     enabled = ~ce;
+   
+   reg 		     read_enable;
+   reg 		     write_enable;
+   assign cy_hpi_oen = ~read_enable;
+   assign cy_hpi_wen = ~write_enable;
+   
+   reg [15:0] 	     hpi_data_read; /* Current HPI Data In */
+   assign data_out[15:0] = hpi_data_read[15:0];
+      
+   wire 	     output_enable;
+   assign output_enable = write_enable & enabled;
+
+   reg [17:0] 	     hpi_data_reg;
+   assign cy_hpi_data = output_enable ? hpi_data_reg[15:0] : 16'bz;
+   assign cy_hpi_address[1:0] = hpi_data_reg[17:16];
+
+   /**************************************************************************/
+   reg               hpi_ready; /* HPI is accepting R/W op. */
+   assign ready = hpi_ready;
+
+   assign irq = cy_hpi_irq;
+   
+   reg [2:0] 	     hpi_state;       /* Current FSM state */   
+  
    always @(posedge clk, posedge reset)
      if (reset)
        begin
-	  tris <= 1;
-   	  oen_reg <= 1;
-   	  st = STATE_IDLE;
+	  hpi_ready <= 0;
+	  read_enable <= 0;
+	  write_enable <= 0;
+	  hpi_data_reg <= 0;
+	  hpi_state = STATE_IDLE;
        end
      else
        begin
-   	  case (st)
-   	    STATE_IDLE:
-   	      begin
-		 tris <= 1;
-   		 hpi_ctl_addr_reg <= HPI_REG_MAILBOX;
-   		 oen_reg <= 1;
-   		 st = splat ? STATE_AD1 : STATE_IDLE;
-   	      end
-   	    STATE_AD1:
-   	      begin
-   		 oen_reg <= 0;
-   		 st = STATE_AD2;
-   	      end
-   	    STATE_AD2:
-   	      begin
-		 hpi_data_in <= hpi_data;
-   		 st = STATE_IDLE;
-   	      end
-   	    default:
-   	      begin
-   		 st = STATE_IDLE;
-   	      end
-   	  endcase
-       end
-   
-   // always @(posedge clk, posedge reset)
-   //   if (reset)
-   //     begin
-   // 	  tris <= 0;
-   // 	  wen_reg <= 1;
-   // 	  st = STATE_IDLE;
-   //     end
-   //   else
-   //     begin
-   // 	  case (st)
-   // 	    STATE_IDLE:
-   // 	      begin
-   // 		 tris <= 0;
-   // 		 hpi_ctl_addr_reg <= HPI_REG_ADDRESS;
-   // 		 hpi_data_out <= HPI_ADDRESS_OUT;
-   // 		 wen_reg <= 1;
-   // 		 st = splat ? STATE_AD1 : STATE_IDLE;
-   // 	      end
-   // 	    STATE_AD1:
-   // 	      begin
-   // 		 wen_reg <= 0;
-   // 		 st = STATE_AD2;
-   // 	      end
-   // 	    STATE_AD2:
-   // 	      begin
-   // 		 // st = rw ? STATE_WR1 : STATE_RD1;
-   // 		 st = STATE_AD3;
-   // 	      end
-   // 	    STATE_AD3:
-   // 	      begin
-   // 		 wen_reg <= 1;
-   // 		 st = STATE_WR1;
-   // 	      end
-   // 	    STATE_WR1:
-   // 	      begin
-   // 		 hpi_ctl_addr_reg <= HPI_REG_DATA;
-   // 		 hpi_data_out <= 16'hCAFE;
-   // 		 st = STATE_WR2;
-   // 	      end
-   // 	    STATE_WR2:
-   // 	      begin
-   // 		 wen_reg <= 0;
-   // 		 st = STATE_WR3;
-   // 	      end
-   // 	    STATE_WR3:
-   // 	      begin
-   // 		 wen_reg <= 1;
-   // 		 // st = splat ? STATE_WR1 : STATE_IDLE;
-   // 		 st = STATE_IDLE;
-   // 	      end
-   // 	    default:
-   // 	      begin
-   // 		 st = STATE_IDLE;
-   // 	      end
-   // 	  endcase
-   //     end
-endmodule // hpi_controller
+	  case (hpi_state)
+	    STATE_IDLE:
+	      begin
+		 hpi_ready <= enabled;
+		 read_enable <= 0;
+		 write_enable <= 0;
+		 /* Begin new R/W operation? */
+		 if (start_op & enabled)
+		   begin
+		      hpi_state = rw ? STATE_READ_1 : STATE_WRITE_1;
+		   end
+		 else
+		   begin
+		      hpi_state = STATE_IDLE;
+		   end
+	      end
+	    STATE_READ_1:
+	      begin
+		 hpi_ready <= 0;
+		 read_enable <= 1; /* READ */
+		 write_enable <= 0;
+		 hpi_state = STATE_READ_2;
+	      end
+	    STATE_READ_2:
+	      begin
+		 hpi_ready <= 0;
+		 read_enable <= 1; /* READ */
+		 write_enable <= 0;
+		 hpi_data_read <= cy_hpi_data;
+		 hpi_state = STATE_IDLE;
+	      end
+	    STATE_WRITE_1:
+	      begin
+		 hpi_ready <= 0;
+		 read_enable <= 0;
+		 write_enable <= 0;
+		 hpi_data_reg <= data_in; /* Data and reg address */
+		 hpi_state = STATE_WRITE_2;
+	      end
+	    STATE_WRITE_2:
+	      begin
+		 hpi_ready <= 0;
+		 read_enable <= 0;
+		 write_enable <= 1; /* WRITE */
+		 hpi_state = STATE_IDLE;
+	      end
+	    default:
+	      begin
+		 hpi_ready <= enabled;
+		 read_enable <= 0;
+		 write_enable <= 0;
+		 hpi_state = STATE_IDLE;
+	      end
+	  endcase // case (state)
+       end // else: !if(reset)
+   /**************************************************************************/
+endmodule
+/**************************************************************************/
