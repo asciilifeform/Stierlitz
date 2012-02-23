@@ -38,8 +38,6 @@ ORIGIN equ 0x500
 
 .xlist
     include cypress/67300.inc
-    include cypress/lcp_cmd.inc
-    include cypress/lcp_data.inc
     include storage.asm
 .list
 
