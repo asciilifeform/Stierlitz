@@ -20,7 +20,7 @@ void make_block(unsigned int i, char *block) {
     block[j] = (unsigned char)(i & 0xFF);
     block[j + 1] = (unsigned char)((i & 0xFF00) >> 8);
     block[j + 2] = (unsigned char)((i & 0xFF0000) >> 16);
-    block[j + 3] = (unsigned char)((i & 0xFF000000) >> 32);
+    block[j + 3] = (unsigned char)((i & 0xFF000000) >> 24);
   }
 }
 
