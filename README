@@ -1,5 +1,9 @@
-Got a bus 41 or fewer bits wide?
+Got a bus 31 or fewer bits wide?
 
 Stierlitz will sit on your bus and imitate a USB Mass Storage device.  The latter will appear to have a FAT16 file system on it, containing a single binary "image" file.
 
 Mount it (under Linux, using "mount -o sync ...") and perform arbitrary reads/writes by reading or writing blocks within the image file.
+
+Make sure to use the O_DIRECT flag (or "raw" block device, if your kernel still has it) to disable ALL caching on the PC end.
+
+If you snip out the FAT16 emulation, you can get 41 bits of address space.
