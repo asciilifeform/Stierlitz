@@ -17,3 +17,7 @@ You will need:
 3) The Xilinx build tools for your board.  Edit the Makefile in the "ml501" directory, esp. if you have a 32-bit Linux.
 4) A UCF file to match your board's wiring, if you have something other than an ML501.
 5) (Optional) SBCL (http://sbcl.org). See the "Lisp" directory.
+
+The "ml501" directory contains a Verilog implementation of the required FPGA-side logic, "stierlitz.v".
+If you build using the provided Makefile (edit to insert your Xilinx tool paths) you will have a demo.
+The demo gives you a 128K "file" mapped to SRAM ("infer-sram.v"; need an FPGA with at least this much Block RAM to run this.)
