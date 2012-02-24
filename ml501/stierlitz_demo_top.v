@@ -105,9 +105,7 @@ module stierlitz_demo_top
    assign sace_mpce = 1; /* Switch off ACE to free the bus it shares with CY */
 
    wire 	hpi_manual_test = EBUTTON; /* temporary manual toggle to run tester */
-
    wire 	usb_irq = usb_hpi_int; /* HPI IRQ is active-high */
-
    
    wire 	sbus_ready;
    wire 	sbus_rw;
