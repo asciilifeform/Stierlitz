@@ -1,5 +1,6 @@
-/**************************************************************************
- *                            Stierlitz (FPGA side)                       *
+ /*************************************************************************
+ *                     This file is part of Stierlitz:                    *
+ *               https://github.com/asciilifeform/Stierlitz               *
  *************************************************************************/
 
 /**************************************************************************
@@ -146,6 +147,7 @@ module stierlitz
 	  LBA[1] <= 0;
 	  LBA[2] <= 0;
 	  LBA[3] <= 0;
+	  bus_byte_out <= 0;
 	  byte_offset <= 0;
 	  hpi_state = STATE_IDLE;
        end
@@ -156,6 +158,7 @@ module stierlitz
 	      begin
 		 read_enable <= 0;
 		 write_enable <= 0;
+		 bus_byte_out <= 0;
 		 /* Idle forever until IRQ is received. */
 		 hpi_state = cy_hpi_irq ? STATE_MBX_READ_1 : STATE_IDLE;
 	      end
@@ -182,6 +185,8 @@ module stierlitz
 	      begin
 		 read_enable <= 0;
 		 write_enable <= 0;
+		 /* Increment block offset only if op is done. */
+		 byte_offset <= bus_ready ? (byte_offset + 1) : byte_offset;
 		 hpi_state = STATE_IDLE;
 	      end
 	    STATE_CMD:
@@ -221,8 +226,7 @@ module stierlitz
 		 bus_rw_control <= 1; /* READ */
 		 bus_op <= 1;   /* Begin op */
 		 hpi_data_out_reg[7:0] <= bus_data; /* Read a byte off the bus. */
-		 /* Increment block offset only if op is done. */
-		 byte_offset <= bus_ready ? (byte_offset + 1) : byte_offset;
+
 		 /* Spin until the bus is READY again. Then send back the byte read. */
 		 hpi_state = bus_ready ? STATE_MBX_WRITE_1 : STATE_BUS_READ;
 	      end
@@ -232,8 +236,7 @@ module stierlitz
 		 write_enable <= 0;
 		 bus_rw_control <= 0; /* WRITE */
 		 bus_op <= 1;   /* Begin op */
-		 /* Increment block offset only if op is done. */
-		 byte_offset <= bus_ready ? (byte_offset + 1) : byte_offset;
+
 		 /* Spin until the bus is READY again. Then send back the byte read. */
 		 hpi_state = bus_ready ? STATE_MBX_WRITE_1 : STATE_BUS_WRITE;
 	      end

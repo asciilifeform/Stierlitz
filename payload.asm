@@ -23,14 +23,6 @@
  ;; *                                                                        *
  ;; *************************************************************************/
 
-
-;*****************************************************************************
-;; io_test				dw 0xBADF
-;; io_test1			dw 0x00D0
-;; io_test2			dw 0xDEAD
-;; io_test3			dw 0xC0DE
-;*****************************************************************************
-
  
 ;*****************************************************************************
 physical_lba_lw			dw 0x0000
@@ -43,14 +35,25 @@ physical_lba_uw			dw 0x0000
 load_physical_lba_block:
     call   send_host_physical_lba
 
-    mov    r1, 0x0200
+    mov    r1, 0x0100
     mov    r9, send_buffer
 @@:
     mov    r0, 0x4000 ; Read byte from bus
     call   hpi_mb_tx  ; Send read command
     call   hpi_mb_rx  ; Receive result
+    and    r0, 0x00FF
+
+    mov    r2, r0
     
-    mov    b[r9++], r0
+    mov    r0, 0x4000 ; Read byte from bus
+    call   hpi_mb_tx  ; Send read command
+    call   hpi_mb_rx  ; Receive result
+    and    r0, 0x00FF
+    shl    r0, 8
+
+    or     r2, r0
+    
+    mov    w[r9++], r2
     dec    r1
     jnz    @b
 
@@ -64,16 +67,24 @@ load_physical_lba_block:
 save_physical_lba_block:
     call   send_host_physical_lba
 
-    mov    r1, 0x0200
+    mov    r1, 0x0100
     mov    r9, block_receive_buffer
 @@:
-    xor    r0, r0
-    mov    r0, b[r9++]
+    mov    r2, w[r9++]
 
+    mov    r0, r2
+    and    r0, 0x00FF
     or     r0, 0x8000 ; Write byte to bus
     call   hpi_mb_tx  ; Send write command
     call   hpi_mb_rx  ; Receive confirmation
 
+    mov    r0, r2
+    shr    r0, 8
+    and    r0, 0x00FF
+    or     r0, 0x8000 ; Write byte to bus
+    call   hpi_mb_tx  ; Send write command
+    call   hpi_mb_rx  ; Receive confirmation
+    
     dec    r1
     jnz    @b
     ret    

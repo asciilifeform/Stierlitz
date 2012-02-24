@@ -1,3 +1,8 @@
+ /*************************************************************************
+ *                     This file is part of Stierlitz:                    *
+ *               https://github.com/asciilifeform/Stierlitz               *
+ *************************************************************************/
+
 /*************************************************************************
  *                (c) Copyright 2012 Stanislav Datskovskiy                *
  *                         http://www.loper-os.org                        *
@@ -22,6 +27,9 @@
 
 `include "stierlitz.v"
 
+// `include "32kofcrap.v"
+
+`include "infer-sram.v"
 
 module stierlitz_demo_top
   (sys_clk,          /* 100MHz main clock line */
@@ -118,7 +126,7 @@ module stierlitz_demo_top
    
    stierlitz s(.clk(hpi_clock),
 	       .reset(usbreset),
-	       .enable(1),
+	       .enable(1'b1),
 	       /* Control wiring */
 	       .bus_ready(sbus_ready),
 	       .bus_address(sbus_address),
@@ -135,22 +143,42 @@ module stierlitz_demo_top
 	       .cy_hpi_resetn(usb_hpi_reset_n)
 	       );
 
-   reg [7:0] 	test;
-   assign sbus_data = sbus_rw ? test : 8'bz;
-
-
-   always @(posedge sys_clk)
-     begin
-	case (sbus_address[1:0])
-	  2'b00:
-	    test <= sbus_address[16:9];
-	  2'b01:
-	    test <= sbus_address[24:17];
-	  2'b10:
-	    test <= sbus_address[32:25];
-	  2'b11:
-	    test <= sbus_address[40:33];
-	endcase // case (sbus_address[1:0])
-     end
+   // reg [7:0] 	test;
+   // wire [7:0] 	test;
    
+   // assign sbus_data = sbus_rw ? test : 8'bz;
+
+   // always @(posedge sys_clk)
+   //   begin
+   // 	case (sbus_address[1:0])
+   // 	  2'b00:
+   // 	    test <= sbus_address[16:9];
+   // 	  2'b01:
+   // 	    test <= sbus_address[24:17];
+   // 	  2'b10:
+   // 	    test <= sbus_address[32:25];
+   // 	  2'b11:
+   // 	    test <= sbus_address[40:33];
+   // 	endcase // case (sbus_address[1:0])
+   //   end
+
+   // craprom rom(.clk(sys_clk),
+   // 	       .address(sbus_address[15:0]),
+   // 	       .data(test)
+   // 	       );
+
+   wire 	ram_we;
+   wire 	ram_oe;
+
+   assign ram_we = (~sbus_rw) & sbus_start_op;
+   assign ram_oe = sbus_rw & sbus_start_op;
+   
+   infer_sram #(17, 8, 131072)
+   ram(.clk(sys_clk),
+       .we(ram_we),
+       .oe(ram_oe),
+       .address(sbus_address[16:0]),
+       .data(sbus_data)
+       );
+      
 endmodule

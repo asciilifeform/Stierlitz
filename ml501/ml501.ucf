@@ -1,3 +1,28 @@
+#  /*************************************************************************
+#  *                     This file is part of Stierlitz:                    *
+#  *               https://github.com/asciilifeform/Stierlitz               *
+#  *************************************************************************/
+
+# /**************************************************************************
+#  *                (c) Copyright 2012 Stanislav Datskovskiy                *
+#  *                         http://www.loper-os.org                        *
+#  **************************************************************************
+#  *                                                                        *
+#  *  This program is free software: you can redistribute it and/or modify  *
+#  *  it under the terms of the GNU General Public License as published by  *
+#  *  the Free Software Foundation, either version 3 of the License, or     *
+#  *  (at your option) any later version.                                   *
+#  *                                                                        *
+#  *  This program is distributed in the hope that it will be useful,       *
+#  *  but WITHOUT ANY WARRANTY; without even the implied warranty of        *
+#  *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the         *
+#  *  GNU General Public License for more details.                          *
+#  *                                                                        *
+#  *  You should have received a copy of the GNU General Public License     *
+#  *  along with this program.  If not, see <http://www.gnu.org/licenses/>. *
+#  *                                                                        *
+#  *************************************************************************/
+
 # LED
 NET led_byte<0> LOC = E11; #GPLED7 (Rightmost - LSB)
 NET led_byte<1> LOC = E10; #GPLED6
@@ -107,3 +132,119 @@ NET usb_hpi_int     LOC        = M4;
 NET usb_hpi_int     IOSTANDARD = LVCMOS33;
 NET usb_hpi_int     TIG;
 NET usb_hpi_int     PULLDOWN;
+
+
+#------------------------------------------------------------------------------
+# ZBT SSRAM controller multi-cycle path constraints (ssram_controller)
+#------------------------------------------------------------------------------
+
+# Define the two clock domains as timespecs
+#NET dcm0_clkdv TNM_NET="wb_clk";
+#TIMESPEC "TS_wb_clk" = PERIOD "wb_clk" 20 ns HIGH 10;
+#NET dcm0_clk0 TNM_NET = "ssram_clk200";
+#TIMESPEC "TS_ssram_clk200" = PERIOD "ssram_clk200" "TS_wb_clk" / 4;
+
+# Now define their relationship - logic should be configured so that there's
+# 1 WB cycle at all times before anything is sampled across domains
+#TIMESPEC "TS_wb_clk_ssram_clk200" = from "wb_clk" TO "ssram_clk200" 15 ns;
+#TIMESPEC "TS_ssram_clk200_wb_clk" = from "ssram_clk200" TO "wb_clk" 15 ns;
+
+
+## #------------------------------------------------------------------------------
+## # IO Pad Location Constraints / Properties for SRAM
+## #------------------------------------------------------------------------------
+
+# NET sram_clk            LOC = U22;
+# NET sram_clk_fb         LOC = AD15;
+# NET sram_clk_fb         IOSTANDARD = LVCMOS33;
+# NET sram_clk            IOSTANDARD = LVDCI_33;
+
+# NET sram_clk_fb FEEDBACK = 1500ps NET sram_clk;
+
+# NET sram_flash_addr<23> LOC = Y10;
+# NET sram_flash_addr<22> LOC = Y11;
+# NET sram_flash_addr<21> LOC = AA17;
+# NET sram_flash_addr<20> LOC = AB17;
+# NET sram_flash_addr<19> LOC = G14;
+# NET sram_flash_addr<18> LOC = F13;
+# NET sram_flash_addr<17> LOC = H14;
+# NET sram_flash_addr<16> LOC = H13;
+# NET sram_flash_addr<15> LOC = F15;
+# NET sram_flash_addr<14> LOC = G15;
+# NET sram_flash_addr<13> LOC = G12;
+# NET sram_flash_addr<12> LOC = H12;
+# NET sram_flash_addr<11> LOC = G16;
+# NET sram_flash_addr<10> LOC = H16;
+# NET sram_flash_addr<9>  LOC = H11;
+# NET sram_flash_addr<8>  LOC = G11;
+# NET sram_flash_addr<7>  LOC = H17;
+# NET sram_flash_addr<6>  LOC = G17;
+# NET sram_flash_addr<5>  LOC = G10;
+# NET sram_flash_addr<4>  LOC = G9;
+# NET sram_flash_addr<3>  LOC = G19;
+# NET sram_flash_addr<2>  LOC = H18;
+# NET sram_flash_addr<1>  LOC = H9;
+# NET sram_flash_addr<0>  LOC = H8;
+# NET sram_flash_addr<*>  IOSTANDARD = LVCMOS33;
+# NET sram_flash_addr<*>  SLEW = FAST;
+# NET sram_flash_addr<*>  DRIVE = 8;
+
+# NET sram_flash_data<31> LOC = AD18 | IOSTANDARD = LVCMOS33 | DRIVE = 12 | SLEW = FAST;
+# NET sram_flash_data<30> LOC = AC18 | IOSTANDARD = LVCMOS33 | DRIVE = 12 | SLEW = FAST;
+# NET sram_flash_data<29> LOC = AB10 | IOSTANDARD = LVCMOS33 | DRIVE = 12 | SLEW = FAST;
+# NET sram_flash_data<28> LOC = AB9  | IOSTANDARD = LVCMOS33 | DRIVE = 12 | SLEW = FAST;
+# NET sram_flash_data<27> LOC = AC17 | IOSTANDARD = LVCMOS33 | DRIVE = 12 | SLEW = FAST;
+# NET sram_flash_data<26> LOC = AC16 | IOSTANDARD = LVCMOS33 | DRIVE = 12 | SLEW = FAST;
+# NET sram_flash_data<25> LOC = AC8  | IOSTANDARD = LVCMOS33 | DRIVE = 12 | SLEW = FAST;
+# NET sram_flash_data<24> LOC = AC9  | IOSTANDARD = LVCMOS33 | DRIVE = 12 | SLEW = FAST;
+# NET sram_flash_data<23> LOC = Y12  | IOSTANDARD = LVCMOS33 | DRIVE = 12 | SLEW = FAST;
+# NET sram_flash_data<22> LOC = Y13  | IOSTANDARD = LVCMOS33 | DRIVE = 12 | SLEW = FAST;
+# NET sram_flash_data<21> LOC = AA15 | IOSTANDARD = LVCMOS33 | DRIVE = 12 | SLEW = FAST;
+# NET sram_flash_data<20> LOC = AB14 | IOSTANDARD = LVCMOS33 | DRIVE = 12 | SLEW = FAST;
+# NET sram_flash_data<19> LOC = AA12 | IOSTANDARD = LVCMOS33 | DRIVE = 12 | SLEW = FAST;
+# NET sram_flash_data<18> LOC = AB11 | IOSTANDARD = LVCMOS33 | DRIVE = 12 | SLEW = FAST;
+# NET sram_flash_data<17> LOC = AA13 | IOSTANDARD = LVCMOS33 | DRIVE = 12 | SLEW = FAST;
+# NET sram_flash_data<16> LOC = AA14 | IOSTANDARD = LVCMOS33 | DRIVE = 12 | SLEW = FAST;
+# NET sram_flash_data<15> LOC = AC24 | IOSTANDARD = LVDCI_33;
+# NET sram_flash_data<14> LOC = AB22 | IOSTANDARD = LVDCI_33;
+# NET sram_flash_data<13> LOC = AA22 | IOSTANDARD = LVDCI_33;
+# NET sram_flash_data<12> LOC = AC21 | IOSTANDARD = LVDCI_33;
+# NET sram_flash_data<11> LOC = AB21 | IOSTANDARD = LVDCI_33;
+# NET sram_flash_data<10> LOC = W21  | IOSTANDARD = LVDCI_33;
+# NET sram_flash_data<9>  LOC = W20  | IOSTANDARD = LVDCI_33;
+# NET sram_flash_data<8>  LOC = U19  | IOSTANDARD = LVDCI_33;
+# NET sram_flash_data<7>  LOC = U20  | IOSTANDARD = LVDCI_33;
+# NET sram_flash_data<6>  LOC = V19  | IOSTANDARD = LVDCI_33;
+# NET sram_flash_data<5>  LOC = W19  | IOSTANDARD = LVDCI_33;
+# NET sram_flash_data<4>  LOC = Y21  | IOSTANDARD = LVDCI_33;
+# NET sram_flash_data<3>  LOC = Y20  | IOSTANDARD = LVDCI_33;
+# NET sram_flash_data<2>  LOC = AD19 | IOSTANDARD = LVDCI_33;
+# NET sram_flash_data<1>  LOC = AC19 | IOSTANDARD = LVDCI_33;
+# NET sram_flash_data<0>  LOC = AB20 | IOSTANDARD = LVDCI_33;
+# NET sram_flash_data<*> PULLDOWN;
+
+# NET sram_cen            LOC = AB24 | IOSTANDARD = LVDCI_33;
+# NET sram_flash_oe_n           LOC = AC22 | IOSTANDARD = LVDCI_33;
+# NET flash_oe_n          LOC = AA9  | IOSTANDARD = LVCMOS33 | DRIVE = 12 | SLEW = FAST;
+# NET sram_flash_we_n     LOC = AB15 | IOSTANDARD = LVCMOS33 | DRIVE = 12 | SLEW = FAST;
+# NET sram_bw<3>          LOC = W24  | IOSTANDARD = LVDCI_33; 
+# NET sram_bw<2>          LOC = W23  | IOSTANDARD = LVDCI_33; 
+# NET sram_bw<1>          LOC = V24  | IOSTANDARD = LVDCI_33;  
+# NET sram_bw<0>          LOC = V23  | IOSTANDARD = LVDCI_33; 
+# NET flash_cen           LOC = AA10 | IOSTANDARD = LVCMOS33 | DRIVE = 12 | SLEW = FAST;
+# NET sram_adv_ld_n       LOC = U21  | IOSTANDARD = LVDCI_33;
+# NET sram_mode           LOC = AC23 | IOSTANDARD = LVDCI_33;
+
+
+# ## #------------------------------------------------------------------------------
+# ## # IO Pad Location Constraints / Properties for CFI Flash (shared with SRAM)
+# ## #------------------------------------------------------------------------------ 
+
+
+# # NET flash_adv_n_o   LOC = AA20  | IOSTANDARD = LVCMOS33;
+# # NET flash_oe_n_o    LOC = AA9  | IOSTANDARD = LVCMOS33 | DRIVE = 12 | SLEW = FAST;
+# # NET flash_we_n_o    LOC = AB15 | IOSTANDARD = LVCMOS33 | DRIVE = 12 | SLEW = FAST;
+# NET flash_ce_n_o    LOC = AA10 | IOSTANDARD = LVCMOS33 | DRIVE = 12 | SLEW = FAST;
+# # NET flash_clk_o     LOC = AB19 | IOSTANDARD = LVCMOS33 | DRIVE = 12 | SLEW = FAST;
+# # NET flash_wait_i    LOC = AA19 | IOSTANDARD = LVCMOS33;
+# # NET flash_rst_n_o   LOC = AD10 | IOSTANDARD = LVCMOS33;
