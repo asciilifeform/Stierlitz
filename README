@@ -1,2 +1,5 @@
-"We are what we pretend to be, so we must be careful about what
-we pretend to be." (K. Vonnegut, "Mother Night")
+Got a bus 41 or fewer bits wide?
+
+Stierlitz will sit on your bus and imitate a USB Mass Storage device.  The latter will appear to have a FAT16 file system on it, containing a single binary "image" file.
+
+Mount it (under Linux, using "mount -o sync ...") and perform arbitrary reads/writes by reading or writing blocks within the image file.

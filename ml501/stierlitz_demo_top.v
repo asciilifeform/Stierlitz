@@ -79,9 +79,10 @@ module stierlitz_demo_top
    wire 	usbreset = CBUTTON | ~sys_rst_pin; /* tie rst to main rst */
    // assign usb_hpi_reset_n = ~usbreset;
 
-   /* 16 MHz (x2) clock for HPI interface */
+   /* Ideally, 16 MHz (x2) clock for HPI interface */
    wire 	hpi_clock;
 
+   /* A bit OC's, ok. */
    reg [1:0] 	clkdiv;
    always @(posedge sys_clk, posedge usbreset)
      if (usbreset)
