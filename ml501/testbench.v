@@ -31,7 +31,7 @@ module stierlitz_testbench;
 
    /* The basics */
    // input wire sys_clk;
-   reg sys_clk;
+   reg hpi_clock = 0;
    
    // input wire sys_rst_pin;
    reg sys_rst_pin;
@@ -55,8 +55,9 @@ module stierlitz_testbench;
    reg 		hpi_int = 0;
    reg [15:0]	usb_d = 0;
    assign usb_hpi_int = hpi_int;
-   assign sace_usb_d = usb_d;
-      
+
+   assign sace_usb_d = ~sace_usb_oen ? usb_d : 'bz;
+   
    
    wire 	usbreset = ~sys_rst_pin;
 
@@ -66,6 +67,12 @@ module stierlitz_testbench;
    wire [40:0] 	sbus_address;
    wire [7:0] 	sbus_data;
 
+   reg 		sb_data = 0;
+   assign sbus_data = sbus_rw ? sb_data : 'bz;
+   
+   
+   assign sbus_ready = 1;
+   
    stierlitz s(.clk(hpi_clock),
 	       .reset(usbreset),
 	       .enable(1),
@@ -86,69 +93,143 @@ module stierlitz_testbench;
 	       );
 
    /* 16 MHz (x2) clock for HPI interface */
-   wire 	hpi_clock;
+   // wire 	hpi_clock;
 
-   reg [6:0] 	clkdiv;
-   always @(posedge sys_clk, posedge usbreset)
-     if (usbreset)
-       begin
-	  clkdiv <= 0;
-       end
-     else
-       begin
-	  clkdiv <= clkdiv + 1;
-       end
-   assign hpi_clock = clkdiv[6];
+   // reg [2:0] 	clkdiv;
+   // always @(posedge sys_clk, posedge usbreset)
+   //   if (usbreset)
+   //     begin
+   // 	  clkdiv <= 0;
+   //     end
+   //   else
+   //     begin
+   // 	  clkdiv <= clkdiv + 1;
+   //     end
+   // assign hpi_clock = clkdiv[2];
 
 
    // 100MHz
    always
      begin
-	sys_clk = 1'b1;
+	hpi_clock <= 1'b1;
 	#5;
-	sys_clk = 1'b0;
+	hpi_clock <= 1'b0;
 	#5;
      end
+
+   parameter T = 1;
+   parameter P = 160;
+
+   always @(posedge hpi_clock)
+     if (~sace_usb_oen)
+       begin
+	  #T;
+	  hpi_int <= 0;
+       end
 
    initial
      begin: Init
 	#0 $display ("Init!\n");
 	#0 sys_rst_pin = 1;
 	// system reset active
-	#1000 sys_rst_pin = 0;
-	#10000 sys_rst_pin = 1;
+	sys_rst_pin = 0;
+	#P;
+	#P;
+	sys_rst_pin = 1;
+	#P;
+	#P;
 	// end of system reset
      end
 
    always
      begin
 	// start of test
-	#20000;
+	#P;
+	#P;
+	#P;
+	#P;
+	#P;
+	// Set up LBA address:
 
+	// LBA-0
 	usb_d = 'h00AA;
 	hpi_int = 1;
-	#10000;
-	hpi_int = 0;
-
+	#P;
+	// LBA-1
 	usb_d = 'h01BB;
 	hpi_int = 1;
-	#10000;
-	hpi_int = 0;
-
+	#P;
+	// LBA-2
 	usb_d = 'h02CC;
 	hpi_int = 1;
-	#10000;
-	hpi_int = 0;
-
+	#P;
+	// LBA-3
 	usb_d = 'h03DD;
 	hpi_int = 1;
-	#10000;
-	hpi_int = 0;
+	#P;
 
-	// ...
+	// Write '0x01'
+	usb_d = 'h8001;
+	hpi_int = 1;
+	#P;
+
+	// Write '0x02'
+	usb_d = 'h8002;
+	hpi_int = 1;
+	#P;
+
+	// Write '0x03'
+	usb_d = 'h8003;
+	hpi_int = 1;
+	#P;
+
+	// Write '0x04'
+	usb_d = 'h8004;
+	hpi_int = 1;
+	#P;
+
+	// Write '0x05'
+	usb_d = 'h8005;
+	hpi_int = 1;
+	#P;
+	
+	// // Read
+	// sb_data = 'h01;
+	// usb_d = 'h4000;
+	// hpi_int = 1;
+	// #P;
+
+	// // Read
+	// sb_data = 'h02;
+	// usb_d = 'h4000;
+	// hpi_int = 1;
+	// #P;
+
+	// // Read
+	// sb_data = 'h03;
+	// usb_d = 'h4000;
+	// hpi_int = 1;
+	// #P;
+
+	// // Read
+	// sb_data = 'h04;
+	// usb_d = 'h4000;
+	// hpi_int = 1;
+	// #P;
+
+	// // Read
+	// sb_data = 'h05;
+	// usb_d = 'h4000;
+	// hpi_int = 1;
+	// #P;
+
 	
 	// end of test
-	#5000000;
+	#P;
+	#P;
+	#P;
+	#P;
+	#P;
         $finish;
      end
 

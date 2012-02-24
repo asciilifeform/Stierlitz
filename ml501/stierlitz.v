@@ -120,10 +120,10 @@ module stierlitz
    reg 		     read_enable;
    reg 		     write_enable;
    assign cy_hpi_oen = ~read_enable;
-   assign cy_hpi_wen = ~write_enable;
+   assign cy_hpi_wen = ~write_enable; /* CY latches data on the rising edge of WEN */
 
    wire 	     output_enable;
-   assign output_enable = write_enable & enable;
+   assign output_enable = write_enable & ~(read_enable) & enable;
 
    reg [15:0] 	     hpi_data_out_reg;
    assign cy_hpi_data = output_enable ? hpi_data_out_reg : 16'bz;
@@ -139,7 +139,6 @@ module stierlitz
        begin
 	  read_enable <= 0;
 	  write_enable <= 0;
-	  bus_op <= 0;
 	  bus_rw_control <= 1;
 	  hpi_data_in_reg <= 0;
 	  hpi_data_out_reg <= 0;
@@ -147,6 +146,7 @@ module stierlitz
 	  LBA[1] <= 0;
 	  LBA[2] <= 0;
 	  LBA[3] <= 0;
+	  bus_op <= 0;
 	  bus_byte_out <= 0;
 	  byte_offset <= 0;
 	  hpi_state = STATE_IDLE;
@@ -158,7 +158,7 @@ module stierlitz
 	      begin
 		 read_enable <= 0;
 		 write_enable <= 0;
-		 bus_byte_out <= 0;
+		 bus_rw_control <= 1;
 		 /* Idle forever until IRQ is received. */
 		 hpi_state = cy_hpi_irq ? STATE_MBX_READ_1 : STATE_IDLE;
 	      end
@@ -179,6 +179,7 @@ module stierlitz
 	      begin
 		 read_enable <= 0;
 		 write_enable <= 1;
+		 bus_op <= 0;
 		 hpi_state = STATE_MBX_WRITE_2;
 	      end
 	    STATE_MBX_WRITE_2:
@@ -205,11 +206,14 @@ module stierlitz
 		     begin
 			/* HPI byte will be written on bus. */
 			bus_byte_out <= hpi_data_in_reg[7:0];
+			bus_rw_control <= 0; /* WRITE */
 			hpi_state = STATE_BUS_WRITE;
 		     end
 		   2'b01:
 		     begin
 			/* Byte will be read from bus and sent back on HPI. */
+			bus_rw_control <= 1; /* READ */
+			bus_op <= 1;
 			hpi_state = STATE_BUS_READ;
 		     end
 		   default:
@@ -223,10 +227,7 @@ module stierlitz
 	      begin
 		 read_enable <= 0;
 		 write_enable <= 0;
-		 bus_rw_control <= 1; /* READ */
-		 bus_op <= 1;   /* Begin op */
 		 hpi_data_out_reg[7:0] <= bus_data; /* Read a byte off the bus. */
-
 		 /* Spin until the bus is READY again. Then send back the byte read. */
 		 hpi_state = bus_ready ? STATE_MBX_WRITE_1 : STATE_BUS_READ;
 	      end
@@ -234,10 +235,8 @@ module stierlitz
 	      begin
 		 read_enable <= 0;
 		 write_enable <= 0;
-		 bus_rw_control <= 0; /* WRITE */
-		 bus_op <= 1;   /* Begin op */
-
-		 /* Spin until the bus is READY again. Then send back the byte read. */
+		 bus_op <= 1;
+		 /* Spin until the bus is READY again. Then write back byte written. */
 		 hpi_state = bus_ready ? STATE_MBX_WRITE_1 : STATE_BUS_WRITE;
 	      end
 	    default:
@@ -248,6 +247,7 @@ module stierlitz
 	      end
 	  endcase // case (state)
        end // else: !if(reset)
+
    /**************************************************************************/
 endmodule
 /**************************************************************************/

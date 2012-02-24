@@ -23,13 +23,10 @@
  *                                                                        *
  *************************************************************************/
 
-`timescale 1ns/1ps
 
 `include "stierlitz.v"
-
-// `include "32kofcrap.v"
-
 `include "infer-sram.v"
+
 
 module stierlitz_demo_top
   (sys_clk,          /* 100MHz main clock line */
@@ -85,22 +82,23 @@ module stierlitz_demo_top
    /* 16 MHz (x2) clock for HPI interface */
    wire 	hpi_clock;
 
-   reg [2:0] 	clkdiv;
+   reg [1:0] 	clkdiv;
    always @(posedge sys_clk, posedge usbreset)
      if (usbreset)
        begin
-	  clkdiv <= 0;
+   	  clkdiv <= 0;
        end
      else
        begin
-	  clkdiv <= clkdiv + 1;
+   	  clkdiv <= clkdiv + 1;
        end
-   assign hpi_clock = clkdiv[2];
+   assign hpi_clock = clkdiv[1];
    
-   // DCM hpi_clock_dcm (.CLKIN(sys_clk),
-   // 		      .CLKFX(hpi_clock),
-   // 		      .RST(sys_rst_pin)
-   // 		      );
+   // DCM_BASE hpi_clock_dcm (.CLKIN(sys_clk),
+   // 			   .CLKFX(hpi_clock),
+   // 			   .RST(sys_rst_pin)
+   // 			   );
+   // defparam hpi_clock_dcm.CLK_FEEDBACK = "NONE";
    // defparam hpi_clock_dcm.CLKFX_MULTIPLY = 4;
    // defparam hpi_clock_dcm.CLKFX_DIVIDE = 25;
 
@@ -162,14 +160,8 @@ module stierlitz_demo_top
    // 	endcase // case (sbus_address[1:0])
    //   end
 
-   // craprom rom(.clk(sys_clk),
-   // 	       .address(sbus_address[15:0]),
-   // 	       .data(test)
-   // 	       );
-
    wire 	ram_we;
    wire 	ram_oe;
-
    assign ram_we = (~sbus_rw) & sbus_start_op;
    assign ram_oe = sbus_rw & sbus_start_op;
    
