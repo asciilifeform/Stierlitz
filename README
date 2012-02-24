@@ -1,9 +1,19 @@
+Got a Xilinx ML501, or another FPGA board with a Cypress CY7C67300 USB controller on it?
+
 Got a bus 31 or fewer bits wide?
 
 Stierlitz will sit on your bus and imitate a USB Mass Storage device.  The latter will appear to have a FAT16 file system on it, containing a single binary "image" file.
 
 Mount it (under Linux, using "mount -o sync ...") and perform arbitrary reads/writes by reading or writing blocks within the image file.
 
-Make sure to use the O_DIRECT flag (or "raw" block device, if your kernel still has it) to disable ALL caching on the PC end.
+Make sure to use the O_DIRECT flag (or "raw" block device, if your kernel still has it) to disable ALL caching on the PC end.  AFAIK, you cannot do this on Windows or Mac. Therefore I did not bother testing Stierlitz at all on those poor, crippled systems.
 
 If you snip out the FAT16 emulation, you can get 41 bits of address space.
+
+You will need:
+
+1) To build the firmware image, you will need an assembler for the Cypress CY16 architecture: "QTASM.EXE". (Get it here: http://www.cypress.com/?rID=14436)
+2) EZOTGDBG (https://github.com/asciilifeform/ezotgdbg) to flash the firmware image to the CY7C67300.
+3) The Xilinx build tools for your board.  Edit the Makefile in the "ml501" directory, esp. if you have a 32-bit Linux.
+4) A UCF file to match your board's wiring, if you have something other than an ML501.
+5) (Optional) SBCL (http://sbcl.org). See the "Lisp" directory.
