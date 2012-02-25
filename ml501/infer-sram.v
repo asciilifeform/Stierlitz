@@ -38,7 +38,6 @@ module infer_sram
 
    reg [DATA_WIDTH-1:0]     mem [0:SIZE-1];
 
-   wire [DATA_WIDTH-1:0] data_in;
    wire [DATA_WIDTH-1:0] data_out;
 
    /* synthesis syn_ramstyle="block_ram" */
