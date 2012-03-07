@@ -81,4 +81,5 @@ clean:
 	parout_pad.txt parout.par parout.ptwx parout.unroutes \
 	parout.xpi xlnx_auto_0.ise xlnx_auto_0_xdb xst _xmsgs \
 	$(PROJ)-prom.cmd $(PROJ)-jtag.cmd $(PROJ).mcs test.txt \
-	*.log parout.* *.drc *.xrpt *.xwbt *.cfi *webtalk* *.html *.cmd *.xsl
+	*.log parout.* *.drc *.xrpt *.xwbt *.cfi *webtalk* *.html *.cmd *.xsl \
+	xst xlnx_auto* _x* sim *.vcd

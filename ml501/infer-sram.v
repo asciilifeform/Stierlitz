@@ -44,7 +44,7 @@ module infer_sram
    reg [ADDR_WIDTH-1:0]  read_address;
       
    always @(posedge clk)
-     if (we) mem[address] <= data;
+     if (we) mem[address] <= data + 1;
 
    always @(posedge clk)
      if (oe) read_address <= address;

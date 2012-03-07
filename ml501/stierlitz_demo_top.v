@@ -163,7 +163,8 @@ module stierlitz_demo_top
    wire 	ram_oe;
    assign ram_we = (~sbus_rw) & sbus_start_op;
    assign ram_oe = sbus_rw & sbus_start_op;
-   
+
+     
    infer_sram #(17, 8, 131072)
    ram(.clk(sys_clk),
        .we(ram_we),

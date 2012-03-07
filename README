@@ -21,3 +21,7 @@ You will need:
 The "ml501" directory contains a Verilog implementation of the required FPGA-side logic, "stierlitz.v".
 If you build using the provided Makefile (edit to insert your Xilinx tool paths) you will have a demo.
 The demo gives you a 128K "file" mapped to SRAM ("infer-sram.v"; need an FPGA with at least this much Block RAM to run this.)
+
+Another example, involving an LCD module, can be seen here:
+
+http://www.loper-os.org/?p=797
